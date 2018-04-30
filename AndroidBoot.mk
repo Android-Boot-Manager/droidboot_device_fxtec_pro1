@@ -1,8 +1,15 @@
 #Android makefile to build bootloader as a part of Android Build
-ifeq ($(shell echo $(SDCLANG_PATH) | head -c 1),/)
-  CLANG_BIN := $(SDCLANG_PATH)/
-else
-  CLANG_BIN := $(ANDROID_BUILD_TOP)/$(SDCLANG_PATH)/
+CLANG_BIN := $(ANDROID_BUILD_TOP)/$(LLVM_PREBUILTS_PATH)/
+ABL_USE_SDLLVM := false
+
+ifneq ($(wildcard $(SDCLANG_PATH)),)
+  ifeq ($(shell echo $(SDCLANG_PATH) | head -c 1),/)
+    CLANG_BIN := $(SDCLANG_PATH)/
+  else
+    CLANG_BIN := $(ANDROID_BUILD_TOP)/$(SDCLANG_PATH)/
+  endif
+
+  ABL_USE_SDLLVM := true
 endif
 
 ifneq ($(wildcard $(SDCLANG_PATH_2)),)
@@ -11,6 +18,8 @@ ifneq ($(wildcard $(SDCLANG_PATH_2)),)
   else
     CLANG_BIN := $(ANDROID_BUILD_TOP)/$(SDCLANG_PATH_2)/
   endif
+
+  ABL_USE_SDLLVM := true
 endif
 
 ifeq ($(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SUPPORTS_VERITY),true)
@@ -23,6 +32,12 @@ ifeq ($(BOARD_AVB_ENABLE),true)
 	VERIFIED_BOOT_2 := VERIFIED_BOOT_2=1
 else
 	VERIFIED_BOOT_2 := VERIFIED_BOOT_2=0
+endif
+
+ifeq ($(BOARD_LEVB_ENABLE),true)
+	VERIFIED_BOOT_LE := VERIFIED_BOOT_LE=1
+else
+	VERIFIED_BOOT_LE := VERIFIED_BOOT_LE=0
 endif
 
 ifeq ($(TARGET_BUILD_VARIANT),user)
@@ -67,9 +82,11 @@ $(TARGET_ABL): abl_clean | $(ABL_OUT) $(INSTALLED_KEYSTOREIMAGE_TARGET)
 		all \
 		$(VERIFIED_BOOT) \
 		$(VERIFIED_BOOT_2) \
+		$(VERIFIED_BOOT_LE) \
 		$(USER_BUILD_VARIANT) \
 		CLANG_BIN=$(CLANG_BIN) \
 		CLANG_PREFIX=$(CLANG35_PREFIX)\
+		ABL_USE_SDLLVM=$(ABL_USE_SDLLVM) \
 		CLANG_GCC_TOOLCHAIN=$(CLANG35_GCC_TOOLCHAIN)\
 		TARGET_ARCHITECTURE=$(TARGET_ARCHITECTURE)
 

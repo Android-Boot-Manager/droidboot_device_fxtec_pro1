@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -65,6 +65,10 @@ ReadFromPartition (EFI_GUID *Ptype, VOID **Msg, UINT32 Size)
       DEBUG ((EFI_D_INFO, "%s: multiple partitions found.\r\n", __func__));
       return EFI_LOAD_ERROR;
     }
+  } else {
+    DEBUG ((EFI_D_ERROR,
+           "%s: GetBlkIOHandles failed: %r\n", __func__, Status));
+    return Status;
   }
 
   BlkIo = HandleInfoList[0].BlkIo;
@@ -96,8 +100,18 @@ RecoveryInit (BOOLEAN *BootIntoRecovery)
 {
   EFI_STATUS Status;
   struct RecoveryMessage *Msg = NULL;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  MemCardType CardType = UNKNOWN;
 
-  Status = ReadFromPartition (&gEfiMiscPartitionGuid, (VOID **)&Msg,
+  CardType = CheckRootDeviceType ();
+  if (CardType == NAND) {
+    Status = GetNandMiscPartiGuid (&Ptype);
+    if (Status != EFI_SUCCESS) {
+      return Status;
+    }
+  }
+
+  Status = ReadFromPartition (&Ptype, (VOID **)&Msg,
                               sizeof (struct RecoveryMessage));
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Error Reading from misc partition: %r\n", Status));
@@ -130,8 +144,18 @@ GetFfbmCommand (CHAR8 *FfbmString, UINT32 Sz)
   CONST CHAR8 *FfbmCmd = "ffbm-";
   CHAR8 *FfbmData = NULL;
   EFI_STATUS Status;
+  EFI_GUID Ptype = gEfiMiscPartitionGuid;
+  MemCardType CardType = UNKNOWN;
 
-  Status = ReadFromPartition (&gEfiMiscPartitionGuid, (VOID **)&FfbmData, Sz);
+  CardType = CheckRootDeviceType ();
+  if (CardType == NAND) {
+    Status = GetNandMiscPartiGuid (&Ptype);
+    if (Status != EFI_SUCCESS) {
+      return Status;
+    }
+  }
+
+  Status = ReadFromPartition (&Ptype, (VOID **)&FfbmData, Sz);
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Error Reading FFBM info from misc: %r\n", Status));
     return Status;

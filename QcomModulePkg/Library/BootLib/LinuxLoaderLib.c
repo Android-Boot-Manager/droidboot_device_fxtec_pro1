@@ -304,6 +304,10 @@ LoadImageFromPartition (VOID *ImageBuffer, UINT32 *ImageSize, CHAR16 *Pname)
           (EFI_D_INFO, "ExecImgFromVolume(): multiple partitions found.\r\n"));
       return EFI_LOAD_ERROR;
     }
+  } else {
+    DEBUG ((EFI_D_ERROR,
+            "%s: GetBlkIOHandles failed: %r\n", __func__, Status));
+    return Status;
   }
 
   BlkIo = HandleInfoList[0].BlkIo;
@@ -462,6 +466,30 @@ ReadWriteDeviceInfo (vb_device_state_op_t Mode, void *DevInfo, UINT32 Sz)
 }
 
 EFI_STATUS
+GetNandMiscPartiGuid (EFI_GUID *Ptype)
+{
+  EFI_STATUS Status = EFI_INVALID_PARAMETER;
+  EFI_NAND_PARTI_GUID_PROTOCOL *NandPartiGuid;
+
+  Status = gBS->LocateProtocol (&gEfiNandPartiGuidProtocolGuid, NULL,
+                                (VOID **)&NandPartiGuid);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Unable to locate NandPartiGuid protocol: %r\n",
+                                Status));
+    return Status;
+  }
+
+  Status = NandPartiGuid->GenGuid (NandPartiGuid, (CONST CHAR16 *)L"misc",
+                                StrLen ((CONST CHAR16 *)L"misc"), Ptype);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "NandPartiGuid GenGuid failed with: %r\n", Status));
+    return Status;
+  }
+
+  return Status;
+}
+
+EFI_STATUS
 WriteToPartition (EFI_GUID *Ptype, VOID *Msg, UINT32 MsgSize)
 {
   EFI_STATUS Status;
@@ -497,6 +525,10 @@ WriteToPartition (EFI_GUID *Ptype, VOID *Msg, UINT32 MsgSize)
       DEBUG ((EFI_D_INFO, "%s: multiple partitions found.\r\n", __func__));
       return EFI_LOAD_ERROR;
     }
+  } else {
+    DEBUG ((EFI_D_ERROR,
+            "%s: GetBlkIOHandles failed: %r\n", __func__, Status));
+    return Status;
   }
 
   BlkIo = HandleInfoList[0].BlkIo;

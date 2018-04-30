@@ -1542,7 +1542,9 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
   AsciiStrToUnicodeStr (arg, PartitionName);
 
-  if (TargetBuildVariantUser ()) {
+  if ((GetAVBVersion () == AVB_LE) ||
+      ((GetAVBVersion () != AVB_LE) &&
+      (TargetBuildVariantUser ()))) {
     if (!IsUnlocked ()) {
       FastbootFail ("Flashing is not allowed in Lock State");
       return;
@@ -1605,11 +1607,10 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
       if (Status == EFI_SUCCESS) {
         FastbootOkay ("");
         goto out;
-      } else {
-        FastbootFail ("Error Updating partition Table\n");
-        goto out;
       }
     }
+    FastbootFail ("Error Updating partition Table\n");
+    goto out;
   }
 
   sparse_header = (sparse_header_t *)mFlashDataBuffer;
@@ -1700,6 +1701,17 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
 
 out:
+  if (!AsciiStrnCmp (arg, "system", AsciiStrLen ("system")) &&
+    GetAVBVersion () == AVB_1 &&
+    !IsEnforcing () &&
+    (FlashResult == EFI_SUCCESS)) {
+     // reset dm_verity mode to enforcing
+    Status = EnableEnforcingMode (TRUE);
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "failed to update verity mode:  %r\n", Status));
+    }
+  }
+
   LunSet = FALSE;
 }
 
@@ -1719,7 +1731,10 @@ CmdErase (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   }
   AsciiStrToUnicodeStr (arg, PartitionName);
 
-  if (TargetBuildVariantUser ()) {
+
+  if ((GetAVBVersion () == AVB_LE) ||
+      ((GetAVBVersion () != AVB_LE) &&
+      (TargetBuildVariantUser ()))) {
     if (!IsUnlocked ()) {
       FastbootFail ("Erase is not allowed in Lock State");
       return;
@@ -2343,12 +2358,25 @@ SetDeviceUnlock (UINT32 Type, BOOLEAN State)
     return;
   }
 
-  Status = DisplayUnlockMenu (Type, State);
-  if (Status != EFI_SUCCESS) {
-    FastbootFail ("Command not support: the display is not enabled");
-    return;
+
+  if (GetAVBVersion () != AVB_LE) {
+    Status = DisplayUnlockMenu (Type, State);
+    if (Status != EFI_SUCCESS) {
+      FastbootFail ("Command not support: the display is not enabled");
+      return;
+    } else {
+      FastbootOkay ("");
+    }
   } else {
+    Status = SetDeviceUnlockValue (Type, State);
+    if (Status != EFI_SUCCESS) {
+         AsciiSPrint (response, MAX_RSP_SIZE, "\tSet device %a failed: %r",
+                  (State ? "unlocked!" : "locked!"), Status);
+         FastbootFail (response);
+         return;
+    }
     FastbootOkay ("");
+    RebootDevice (RECOVERY_MODE);
   }
 }
 #endif

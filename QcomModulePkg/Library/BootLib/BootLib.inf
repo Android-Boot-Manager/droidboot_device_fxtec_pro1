@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -37,7 +37,7 @@
 	LIBRARY_CLASS                  = BootLib
 
 [BuildOptions.AARCH64]
-	GCC:*_*_*_CC_FLAGS = -O2 --compile-and-analyze $(BUILD_REPORT_DIR)
+	GCC:*_*_*_CC_FLAGS = -O2 $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_UNDEFINED)
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_ALIGNMENT)
 
@@ -141,6 +141,7 @@
 	gQcomRngProtocolGuid
 	gQcomMdtpProtocolGuid
 	gQcomScmProtocolGuid
+	gEfiNandPartiGuidProtocolGuid
 
 [FixedPcd]
 	gArmTokenSpaceGuid.PcdSystemMemoryBase
