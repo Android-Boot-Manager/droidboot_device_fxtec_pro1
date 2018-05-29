@@ -72,7 +72,8 @@ typedef struct UpdateCmdLineParamList {
   CHAR8 *FfbmStr;
   CHAR8 *AndroidSlotSuffix;
   CHAR8 *SkipRamFs;
-  CHAR8 *MultiSlotCmdSuffix;
+  CHAR8 *RootCmdLine;
+  CHAR8 *InitCmdline;
 } UpdateCmdLineParamList;
 
 EFI_STATUS

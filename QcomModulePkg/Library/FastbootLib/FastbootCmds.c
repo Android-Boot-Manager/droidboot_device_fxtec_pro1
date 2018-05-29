@@ -48,7 +48,6 @@ found at
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/BaseMemoryLib.h>
-#include <Library/BoardCustom.h>
 #include <Library/DebugLib.h>
 #include <Library/DeviceInfo.h>
 #include <Library/DevicePathLib.h>
@@ -89,6 +88,8 @@ STATIC struct GetVarPartitionInfo part_info[] = {
     {"cache", "partition-size:", "partition-type:", "", "ext4"},
 };
 
+STATIC struct GetVarPartitionInfo PublishedPartInfo[MAX_NUM_PARTITIONS];
+
 #ifdef ENABLE_UPDATE_PARTITIONS_CMDS
 STATIC CONST CHAR16 *CriticalPartitions[] = {
     L"abl",  L"rpm",        L"tz",      L"sdi",       L"xbl",       L"hyp",
@@ -105,6 +106,9 @@ STATIC CHAR8 StrBatteryVoltage[MAX_RSP_SIZE];
 STATIC CHAR8 StrBatterySocOk[MAX_RSP_SIZE];
 STATIC CHAR8 ChargeScreenEnable[MAX_RSP_SIZE];
 STATIC CHAR8 OffModeCharge[MAX_RSP_SIZE];
+STATIC CHAR8 StrSocVersion[MAX_RSP_SIZE];
+STATIC CHAR8 LogicalBlkSizeStr[MAX_RSP_SIZE];
+STATIC CHAR8 EraseBlkSizeStr[MAX_RSP_SIZE];
 
 struct GetVarSlotInfo {
   CHAR8 SlotSuffix[MAX_SLOT_SUFFIX_SZ];
@@ -169,6 +173,8 @@ AcceptCmd (IN UINT64 Size, IN CHAR8 *Data);
 STATIC VOID
 AcceptCmdHandler (IN EFI_EVENT Event, IN VOID *Context);
 
+#define NAND_PAGES_PER_BLOCK 64
+
 #define UBI_HEADER_MAGIC "UBI#"
 #define UBI_NUM_IMAGES 1
 typedef struct UbiHeader {
@@ -179,6 +185,18 @@ typedef struct {
   UINT64 Size;
   VOID *Data;
 } CmdInfo;
+
+#ifdef DISABLE_PARALLEL_DOWNLOAD_FLASH
+BOOLEAN IsDisableParallelDownloadFlash (VOID)
+{
+  return TRUE;
+}
+#else
+BOOLEAN IsDisableParallelDownloadFlash (VOID)
+{
+  return FALSE;
+}
+#endif
 
 /* Clean up memory for the getvar variables during exit */
 STATIC EFI_STATUS FastbootUnInit (VOID)
@@ -490,9 +508,7 @@ WriteToDisk (IN EFI_BLOCK_IO_PROTOCOL *BlockIo,
              IN UINT64 Size,
              IN UINT64 offset)
 {
-  return BlockIo->WriteBlocks (
-      BlockIo, BlockIo->Media->MediaId, offset,
-      ROUND_TO_PAGE (Size, BlockIo->Media->BlockSize - 1), Image);
+  return WriteBlockToPartition (BlockIo, offset, Size, Image);
 }
 
 STATIC BOOLEAN
@@ -1016,9 +1032,12 @@ HandleRawImgFlash (IN CHAR16 *PartitionName,
 
     return EFI_VOLUME_FULL;
   }
-  Status = BlockIo->WriteBlocks (
-      BlockIo, BlockIo->Media->MediaId, 0,
-      ROUND_TO_PAGE (Size, BlockIo->Media->BlockSize - 1), Image);
+
+  Status = WriteBlockToPartition (BlockIo, 0, Size, Image);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Writing Block to partition Failure\n"));
+  }
+
   if (MultiSlotBoot && HasSlot &&
       !(StrnCmp (PartitionName, (CONST CHAR16 *)L"boot",
                  StrLen ((CONST CHAR16 *)L"boot"))))
@@ -1639,7 +1658,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
     PartitionSize = (BlockIo->Media->LastBlock + 1)
                         * (BlockIo->Media->BlockSize);
 
-    if (PartitionSize > MAX_DOWNLOAD_SIZE) {
+    if ((PartitionSize > MAX_DOWNLOAD_SIZE) &&
+         !IsDisableParallelDownloadFlash ()) {
       Status = HandleUsbEventsInTimer ();
       if (EFI_ERROR (Status)) {
         DEBUG ((EFI_D_ERROR, "Failed to handle usb event: %r\n", Status));
@@ -1678,7 +1698,8 @@ CmdFlash (IN CONST CHAR8 *arg, IN VOID *data, IN UINT32 sz)
   if ((sparse_header->magic != SPARSE_HEADER_MAGIC) ||
         (PartitionSize < MAX_DOWNLOAD_SIZE) ||
         ((PartitionSize > MAX_DOWNLOAD_SIZE) &&
-        (Status != EFI_SUCCESS))) {
+        (IsDisableParallelDownloadFlash () ||
+        (Status != EFI_SUCCESS)))) {
     if (EFI_ERROR (FlashResult)) {
       if (FlashResult == EFI_NOT_FOUND) {
         AsciiSPrint (FlashResultStr, MAX_RSP_SIZE, "(%s) No such partition",
@@ -2057,7 +2078,8 @@ FastbootCmdsInit (VOID)
   /* Allocate buffer used to store images passed by the download command */
   Status =
         GetFastbootDeviceData ().UsbDeviceProtocol->AllocateTransferBuffer (
-               IsLEVariant () ? MAX_BUFFER_SIZE : (MAX_BUFFER_SIZE * 2),
+               (CheckRootDeviceType () == NAND) ?
+                      MAX_BUFFER_SIZE : (MAX_BUFFER_SIZE * 2),
                (VOID **)&FastBootBuffer);
 
   if (Status != EFI_SUCCESS) {
@@ -2233,7 +2255,7 @@ CmdGetVar (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 STATIC VOID
 CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 {
-  struct boot_img_hdr *hdr = (struct boot_img_hdr *)Data;
+  boot_img_hdr *hdr = Data;
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 ImageSizeActual = 0;
   UINT32 ImageHdrSize = 0;
@@ -2259,7 +2281,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
     }
   }
 
-  if (Size < sizeof (struct boot_img_hdr)) {
+  if (Size < sizeof (boot_img_hdr)) {
     FastbootFail ("Invalid Boot image Header");
     return;
   }
@@ -2601,29 +2623,32 @@ AcceptCmd (IN UINT64 Size, IN CHAR8 *Data)
     Size = MAX_FASTBOOT_COMMAND_SIZE;
   Data[Size] = '\0';
 
-  /* Wait for flash finished before next command */
-  if (AsciiStrnCmp (Data, "download", AsciiStrLen ("download"))) {
-    StopUsbTimer ();
-    if (!IsFlashComplete) {
-      Status = AcceptCmdTimerInit (Size, Data);
-      if (Status == EFI_SUCCESS)
-        return;
-    }
-  }
-
   DEBUG ((EFI_D_INFO, "Handling Cmd: %a\n", Data));
 
-  /* Check last flash result */
-  if (FlashResult != EFI_SUCCESS) {
-    AsciiSPrint (FlashResultStr, MAX_RSP_SIZE, "%a : %r",
+  if (!IsDisableParallelDownloadFlash ()) {
+    /* Wait for flash finished before next command */
+    if (AsciiStrnCmp (Data, "download", AsciiStrLen ("download"))) {
+      StopUsbTimer ();
+      if (!IsFlashComplete) {
+        Status = AcceptCmdTimerInit (Size, Data);
+        if (Status == EFI_SUCCESS) {
+          return;
+        }
+      }
+    }
+
+    /* Check last flash result */
+    if (FlashResult != EFI_SUCCESS) {
+      AsciiSPrint (FlashResultStr, MAX_RSP_SIZE, "%a : %r",
                  "Error: Last flash failed", FlashResult);
 
-    DEBUG ((EFI_D_ERROR, "%a\n", FlashResultStr));
-    if (!AsciiStrnCmp (Data, "flash", AsciiStrLen ("flash")) ||
-        !AsciiStrnCmp (Data, "download", AsciiStrLen ("download"))) {
-      FastbootFail (FlashResultStr);
-      FlashResult = EFI_SUCCESS;
-      return;
+      DEBUG ((EFI_D_ERROR, "%a\n", FlashResultStr));
+      if (!AsciiStrnCmp (Data, "flash", AsciiStrLen ("flash")) ||
+          !AsciiStrnCmp (Data, "download", AsciiStrLen ("download"))) {
+        FastbootFail (FlashResultStr);
+        FlashResult = EFI_SUCCESS;
+        return;
+      }
     }
   }
 
@@ -2663,59 +2688,218 @@ AcceptCmd (IN UINT64 Size, IN CHAR8 *Data)
   FastbootFail ("unknown command");
 }
 
-STATIC EFI_STATUS
-PublishGetVarPartitionInfo (IN struct GetVarPartitionInfo *info,
-                            IN UINT32 num_parts)
+STATIC VOID
+CheckPartitionFsSignature (IN CHAR16 *PartName,
+                           OUT FS_SIGNATURE *FsSignature)
 {
-  UINT32 i;
+  EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
+  EFI_HANDLE *Handle = NULL;
+  EFI_STATUS Status = EFI_SUCCESS;
+  UINT32 BlkSz = 0;
+  CHAR8 *FsSuperBlk = NULL;
+  CHAR8 *FsSuperBlkBuffer = NULL;
+  UINT32 SuperBlkLba = 0;
+
+  *FsSignature = UNKNOWN_FS_SIGNATURE;
+
+  Status = PartitionGetInfo (PartName, &BlockIo, &Handle);
+  if (Status != EFI_SUCCESS) {
+    DEBUG ((EFI_D_ERROR, "Failed to Info for %s partition\n", PartName));
+    return;
+  }
+  if (!BlockIo) {
+    DEBUG ((EFI_D_ERROR, "BlockIo for %s is corrupted\n", PartName));
+    return;
+  }
+
+  BlkSz = BlockIo->Media->BlockSize;
+  FsSuperBlkBuffer = AllocatePool (BlkSz);
+  if (!FsSuperBlkBuffer) {
+    DEBUG ((EFI_D_ERROR, "Failed to allocate buffer for superblock %s\n",
+                            PartName));
+    return;
+  }
+  FsSuperBlk = FsSuperBlkBuffer;
+  SuperBlkLba = (FS_SUPERBLOCK_OFFSET / BlkSz);
+
+  BlockIo->ReadBlocks (BlockIo, BlockIo->Media->MediaId,
+                           SuperBlkLba,
+                           BlkSz, FsSuperBlkBuffer);
+
+  /* If superblklba is 0, it means super block is part of first block read */
+  if (SuperBlkLba == 0) {
+    FsSuperBlk += FS_SUPERBLOCK_OFFSET;
+  }
+
+  if (*((UINT16 *)&FsSuperBlk[EXT_MAGIC_OFFSET_SB]) == (UINT16)EXT_FS_MAGIC) {
+    DEBUG ((EFI_D_VERBOSE, "%s Found EXT FS type\n", PartName));
+    *FsSignature = EXT_FS_SIGNATURE;
+  } else if (*((UINT32 *)&FsSuperBlk[F2FS_MAGIC_OFFSET_SB]) ==
+              (UINT32)F2FS_FS_MAGIC) {
+      DEBUG ((EFI_D_VERBOSE, "%s Found F2FS FS type\n", PartName));
+      *FsSignature = F2FS_FS_SIGNATURE;
+    } else {
+        DEBUG ((EFI_D_VERBOSE, "%s No Known FS type Found\n", PartName));
+  }
+
+  if (FsSuperBlkBuffer) {
+     FreePool (FsSuperBlkBuffer);
+  }
+  return;
+}
+
+STATIC EFI_STATUS
+GetPartitionType (IN CHAR16 *PartName, OUT CHAR8 * PartType)
+{
+  UINT32 LoopCounter;
+  CHAR8 AsciiPartName[MAX_GET_VAR_NAME_SIZE];
+  FS_SIGNATURE FsSignature;
+
+  if (PartName == NULL ||
+      PartType == NULL) {
+    DEBUG ((EFI_D_ERROR, "Invalid parameters to GetPartitionType\n"));
+    return EFI_INVALID_PARAMETER;
+  }
+
+  /* By default copy raw to response */
+  AsciiStrnCpyS (PartType, MAX_GET_VAR_NAME_SIZE,
+                  RAW_FS_STR, AsciiStrLen (RAW_FS_STR));
+  UnicodeStrToAsciiStr (PartName, AsciiPartName);
+
+  /* Mark partition type for hard-coded partitions only */
+  for (LoopCounter = 0; LoopCounter < ARRAY_SIZE (part_info); LoopCounter++) {
+    /* Check if its a hardcoded partition type */
+    if (!AsciiStrnCmp ((CONST CHAR8 *) AsciiPartName,
+                          part_info[LoopCounter].part_name,
+                          AsciiStrLen (part_info[LoopCounter].part_name))) {
+      /* Check filesystem type present on partition */
+      CheckPartitionFsSignature (PartName, &FsSignature);
+      switch (FsSignature) {
+        case EXT_FS_SIGNATURE:
+          AsciiStrnCpy (PartType, EXT_FS_STR, AsciiStrLen (EXT_FS_STR));
+          break;
+        case F2FS_FS_SIGNATURE:
+          AsciiStrnCpy (PartType, F2FS_FS_STR, AsciiStrLen (F2FS_FS_STR));
+          break;
+        case UNKNOWN_FS_SIGNATURE:
+          /* Copy default hardcoded type in case unknown partition type */
+          AsciiStrnCpyS (PartType, MAX_GET_VAR_NAME_SIZE,
+                          part_info[LoopCounter].type_response,
+                          AsciiStrLen (part_info[LoopCounter].type_response));
+      }
+    }
+  }
+  return EFI_SUCCESS;
+}
+
+STATIC EFI_STATUS
+GetPartitionSize (IN CHAR16 *PartName, OUT CHAR8 * PartSize)
+{
   EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
   EFI_HANDLE *Handle = NULL;
   EFI_STATUS Status = EFI_INVALID_PARAMETER;
-  CHAR16 PartitionNameUniCode[MAX_GPT_NAME_SIZE];
-  Slot CurrentSlot;
-  CHAR8 CurrSlotAscii[MAX_SLOT_SUFFIX_SZ];
 
-  for (i = 0; i < num_parts; i++) {
-    AsciiStrToUnicodeStr (info[i].part_name, PartitionNameUniCode);
-    if (PartitionHasMultiSlot (PartitionNameUniCode)) {
-      CurrentSlot = GetCurrentSlotSuffix ();
-      StrnCatS (PartitionNameUniCode, MAX_GPT_NAME_SIZE, CurrentSlot.Suffix,
-                StrLen (CurrentSlot.Suffix));
-      UnicodeStrToAsciiStr (CurrentSlot.Suffix, CurrSlotAscii);
-      AsciiStrnCatS ((CHAR8 *)info[i].part_name, MAX_GET_VAR_NAME_SIZE,
-                     CurrSlotAscii, MAX_SLOT_SUFFIX_SZ);
-    }
-    Status = PartitionGetInfo (PartitionNameUniCode, &BlockIo, &Handle);
-    if (Status != EFI_SUCCESS)
-      return Status;
-    if (!BlockIo) {
-      DEBUG ((EFI_D_ERROR, "BlockIo for %a is corrupted\n", info[i].part_name));
-      return EFI_VOLUME_CORRUPTED;
-    }
-    if (!Handle) {
-      DEBUG (
-          (EFI_D_ERROR, "EFI handle for %a is corrupted\n", info[i].part_name));
-      return EFI_VOLUME_CORRUPTED;
-    }
-
-    AsciiSPrint (info[i].size_response, MAX_RSP_SIZE, " 0x%llx",
-                 (UINT64) (BlockIo->Media->LastBlock + 1) *
-                     BlockIo->Media->BlockSize);
-
-    Status = AsciiStrnCatS (info[i].getvar_size_str, MAX_GET_VAR_NAME_SIZE,
-                            info[i].part_name, AsciiStrLen (info[i].part_name));
-    if (EFI_ERROR (Status))
-      DEBUG ((EFI_D_ERROR, "Error Publishing the partition size info\n"));
-
-    Status = AsciiStrnCatS (info[i].getvar_type_str, MAX_GET_VAR_NAME_SIZE,
-                            info[i].part_name, AsciiStrLen (info[i].part_name));
-    if (EFI_ERROR (Status))
-      DEBUG ((EFI_D_ERROR, "Error Publishing the partition type info\n"));
-
-    FastbootPublishVar (info[i].getvar_size_str, info[i].size_response);
-    FastbootPublishVar (info[i].getvar_type_str, info[i].type_response);
+  Status = PartitionGetInfo (PartName, &BlockIo, &Handle);
+  if (Status != EFI_SUCCESS) {
+    return Status;
   }
-  return Status;
+
+  if (!BlockIo) {
+    DEBUG ((EFI_D_ERROR, "BlockIo for %s is corrupted\n", PartName));
+    return EFI_VOLUME_CORRUPTED;
+  }
+
+  AsciiSPrint (PartSize, MAX_RSP_SIZE, " 0x%llx",
+               (UINT64) (BlockIo->Media->LastBlock + 1) *
+                   BlockIo->Media->BlockSize);
+  return EFI_SUCCESS;
+
+}
+
+STATIC EFI_STATUS
+PublishGetVarPartitionInfo (
+                            IN struct GetVarPartitionInfo *PublishedPartInfo,
+                            IN UINT32 NumParts)
+{
+  UINT32 PtnLoopCount;
+  EFI_STATUS Status = EFI_INVALID_PARAMETER;
+  EFI_STATUS RetStatus = EFI_SUCCESS;
+  CHAR16 *PartitionNameUniCode = NULL;
+  BOOLEAN PublishType;
+  BOOLEAN PublishSize;
+
+  /* Clear Published Partition Buffer */
+  gBS->SetMem (PublishedPartInfo,
+          sizeof (struct GetVarPartitionInfo) * MAX_NUM_PARTITIONS, 0);
+
+  /* Loop will go through each partition entry
+     and publish info for all partitions.*/
+  for (PtnLoopCount = 1; PtnLoopCount <= NumParts; PtnLoopCount++) {
+    PublishType = FALSE;
+    PublishSize = FALSE;
+    PartitionNameUniCode = PtnEntries[PtnLoopCount].PartEntry.PartitionName;
+    /* Skip Null/last partition */
+    if (PartitionNameUniCode[0] == '\0') {
+      continue;
+    }
+    UnicodeStrToAsciiStr (PtnEntries[PtnLoopCount].PartEntry.PartitionName,
+                          (CHAR8 *)PublishedPartInfo[PtnLoopCount].part_name);
+
+    /* Fill partition size variable and response string */
+    AsciiStrnCpyS (PublishedPartInfo[PtnLoopCount].getvar_size_str,
+                      MAX_GET_VAR_NAME_SIZE, "partition-size:",
+                      AsciiStrLen ("partition-size:"));
+    Status = AsciiStrnCatS (PublishedPartInfo[PtnLoopCount].getvar_size_str,
+                            MAX_GET_VAR_NAME_SIZE,
+                            PublishedPartInfo[PtnLoopCount].part_name,
+                            AsciiStrLen (
+                              PublishedPartInfo[PtnLoopCount].part_name));
+    if (!EFI_ERROR (Status)) {
+      Status = GetPartitionSize (
+                            PartitionNameUniCode,
+                            PublishedPartInfo[PtnLoopCount].size_response);
+      if (Status == EFI_SUCCESS) {
+        PublishSize = TRUE;
+      }
+    }
+
+    /* Fill partition type variable and response string */
+    AsciiStrnCpyS (PublishedPartInfo[PtnLoopCount].getvar_type_str,
+                    MAX_GET_VAR_NAME_SIZE, "partition-type:",
+                    AsciiStrLen ("partition-type:"));
+    Status = AsciiStrnCatS (PublishedPartInfo[PtnLoopCount].getvar_type_str,
+                              MAX_GET_VAR_NAME_SIZE,
+                              PublishedPartInfo[PtnLoopCount].part_name,
+                              AsciiStrLen (
+                                PublishedPartInfo[PtnLoopCount].part_name));
+    if (!EFI_ERROR (Status)) {
+      Status = GetPartitionType (
+                            PartitionNameUniCode,
+                            PublishedPartInfo[PtnLoopCount].type_response);
+      if (Status == EFI_SUCCESS) {
+        PublishType = TRUE;
+      }
+    }
+
+    if (PublishSize) {
+      FastbootPublishVar (PublishedPartInfo[PtnLoopCount].getvar_size_str,
+                              PublishedPartInfo[PtnLoopCount].size_response);
+    } else {
+        DEBUG ((EFI_D_ERROR, "Error Publishing size info for %s partition\n",
+                                                        PartitionNameUniCode));
+        RetStatus = EFI_INVALID_PARAMETER;
+    }
+
+    if (PublishType) {
+      FastbootPublishVar (PublishedPartInfo[PtnLoopCount].getvar_type_str,
+                              PublishedPartInfo[PtnLoopCount].type_response);
+    } else {
+        DEBUG ((EFI_D_ERROR, "Error Publishing type info for %s partition\n",
+                                                        PartitionNameUniCode));
+        RetStatus = EFI_INVALID_PARAMETER;
+    }
+  }
+  return RetStatus;
 }
 
 STATIC EFI_STATUS
@@ -2765,17 +2949,21 @@ FastbootCommandSetup (IN VOID *base, IN UINT32 size)
   CHAR8 DeviceType[MAX_RSP_SIZE] = "\0";
   BOOLEAN BatterySocOk = FALSE;
   UINT32 BatteryVoltage = 0;
+  UINT32 PartitionCount = 0;
   BOOLEAN MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
+  MemCardType Type = UNKNOWN;
 
   mDataBuffer = base;
   mNumDataBytes = size;
   mFlashNumDataBytes = size;
   mUsbDataBuffer = base;
 
-  mFlashDataBuffer = IsLEVariant () ? base : (base + MAX_BUFFER_SIZE);
+  mFlashDataBuffer = (CheckRootDeviceType () == NAND) ?
+                           base : (base + MAX_BUFFER_SIZE);
 
   /* Find all Software Partitions in the User Partition */
   UINT32 i;
+  UINT32 BlkSize = 0;
   DeviceInfo *DevInfoPtr = NULL;
 
   struct FastbootCmdDesc cmd_list[] = {
@@ -2827,8 +3015,7 @@ FastbootCommandSetup (IN VOID *base, IN UINT32 size)
   /* Publish getvar variables */
   FastbootPublishVar ("kernel", "uefi");
   FastbootPublishVar ("max-download-size", MAX_DOWNLOAD_SIZE_STR);
-  AsciiStrnCpyS (FullProduct, MAX_RSP_SIZE, BoardPlatformChipBaseBand (),
-                 sizeof (BoardPlatformChipBaseBand ()));
+  AsciiSPrint (FullProduct, sizeof (FullProduct), "%a", PRODUCT_NAME);
   FastbootPublishVar ("product", FullProduct);
   FastbootPublishVar ("serialno", StrSerialNum);
   FastbootPublishVar ("secure", IsSecureBootEnabled () ? "yes" : "no");
@@ -2843,15 +3030,25 @@ FastbootCommandSetup (IN VOID *base, IN UINT32 size)
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
   }
 
-  Status = PublishGetVarPartitionInfo (part_info, sizeof (part_info) /
-                                                      sizeof (part_info[0]));
+  GetPartitionCount (&PartitionCount);
+  Status = PublishGetVarPartitionInfo (PublishedPartInfo, PartitionCount);
   if (Status != EFI_SUCCESS)
-    DEBUG ((EFI_D_ERROR, "Partition Table info is not populated\n"));
+    DEBUG ((EFI_D_ERROR, "Failed to publish part info for all partitions\n"));
   BoardHwPlatformName (HWPlatformBuf, sizeof (HWPlatformBuf));
   GetRootDeviceType (DeviceType, sizeof (DeviceType));
   AsciiSPrint (StrVariant, sizeof (StrVariant), "%a %a", HWPlatformBuf,
                DeviceType);
   FastbootPublishVar ("variant", StrVariant);
+  GetPageSize (&BlkSize);
+  AsciiSPrint (LogicalBlkSizeStr, sizeof (LogicalBlkSizeStr), " 0x%x", BlkSize);
+  FastbootPublishVar ("logical-block-size", LogicalBlkSizeStr);
+  Type = CheckRootDeviceType ();
+  if (Type == NAND) {
+    BlkSize = NAND_PAGES_PER_BLOCK * BlkSize;
+  }
+
+  AsciiSPrint (EraseBlkSizeStr, sizeof (EraseBlkSizeStr), " 0x%x", BlkSize);
+  FastbootPublishVar ("erase-block-size", EraseBlkSizeStr);
   GetDevInfo (&DevInfoPtr);
   FastbootPublishVar ("version-bootloader", DevInfoPtr->bootloader_version);
   FastbootPublishVar ("version-baseband", DevInfoPtr->radio_version);
@@ -2869,6 +3066,10 @@ FastbootCommandSetup (IN VOID *base, IN UINT32 size)
                IsChargingScreenEnable ());
   FastbootPublishVar ("off-mode-charge", ChargeScreenEnable);
   FastbootPublishVar ("unlocked", IsUnlocked () ? "yes" : "no");
+
+  AsciiSPrint (StrSocVersion, sizeof (StrSocVersion), "%x",
+                BoardPlatformChipVersion ());
+  FastbootPublishVar ("hw-revision", StrSocVersion);
 
   /* Register handlers for the supported commands*/
   UINT32 FastbootCmdCnt = sizeof (cmd_list) / sizeof (cmd_list[0]);

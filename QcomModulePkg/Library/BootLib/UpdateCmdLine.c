@@ -56,7 +56,8 @@ STATIC CONST CHAR8 *AlarmBootCmdLine = " androidboot.alarmboot=true";
 
 /*Send slot suffix in cmdline with which we have booted*/
 STATIC CHAR8 *AndroidSlotSuffix = " androidboot.slot_suffix=";
-STATIC CHAR8 *MultiSlotCmdSuffix = " rootwait ro init=/init";
+STATIC CHAR8 *RootCmdLine = " rootwait ro init=";
+STATIC CHAR8 *InitCmdline = INIT_BIN;
 STATIC CHAR8 *SkipRamFs = " skip_initramfs";
 
 /* Display command line related structures */
@@ -386,84 +387,94 @@ UpdateCmdLineParams (UpdateCmdLineParamList *Param,
   }
 
   Src = Param->UsbSerialCmdLine;
-   --Dst;
-   STR_COPY (Dst, Src);
-   --Dst;
-   Src = Param->StrSerialNum;
-   STR_COPY (Dst, Src);
+  --Dst;
+  STR_COPY (Dst, Src);
+  --Dst;
+  Src = Param->StrSerialNum;
+  STR_COPY (Dst, Src);
 
-   if (Param->FfbmStr &&
-       (Param->FfbmStr[0] != '\0')) {
-     Src = Param->AndroidBootMode;
-     --Dst;
-     STR_COPY (Dst, Src);
+  if (Param->FfbmStr &&
+      (Param->FfbmStr[0] != '\0')) {
+    Src = Param->AndroidBootMode;
+    --Dst;
+    STR_COPY (Dst, Src);
 
-     Src = Param->FfbmStr;
-     --Dst;
-     STR_COPY (Dst, Src);
+    Src = Param->FfbmStr;
+    --Dst;
+    STR_COPY (Dst, Src);
 
-     Src = Param->LogLevel;
-     --Dst;
-     STR_COPY (Dst, Src);
-   } else if (Param->PauseAtBootUp) {
-     Src = Param->BatteryChgPause;
-     --Dst;
-     STR_COPY (Dst, Src);
-   } else if (Param->AlarmBoot) {
-     Src = Param->AlarmBootCmdLine;
-     --Dst;
-     STR_COPY (Dst, Src);
-   }
+    Src = Param->LogLevel;
+    --Dst;
+    STR_COPY (Dst, Src);
+  } else if (Param->PauseAtBootUp) {
+    Src = Param->BatteryChgPause;
+    --Dst;
+    STR_COPY (Dst, Src);
+  } else if (Param->AlarmBoot) {
+    Src = Param->AlarmBootCmdLine;
+    --Dst;
+    STR_COPY (Dst, Src);
+  }
 
-   Src = BOOT_BASE_BAND;
-   --Dst;
-   STR_COPY (Dst, Src);
-   --Dst;
+  Src = BOOT_BASE_BAND;
+  --Dst;
+  STR_COPY (Dst, Src);
+  --Dst;
 
-   gBS->SetMem (Param->ChipBaseBand, CHIP_BASE_BAND_LEN, 0);
-   AsciiStrnCpyS (Param->ChipBaseBand, CHIP_BASE_BAND_LEN,
-                  BoardPlatformChipBaseBand (),
-                  (CHIP_BASE_BAND_LEN - 1));
-   ToLower (Param->ChipBaseBand);
-   Src = Param->ChipBaseBand;
-   STR_COPY (Dst, Src);
+  gBS->SetMem (Param->ChipBaseBand, CHIP_BASE_BAND_LEN, 0);
+  AsciiStrnCpyS (Param->ChipBaseBand, CHIP_BASE_BAND_LEN,
+                 BoardPlatformChipBaseBand (),
+                 (CHIP_BASE_BAND_LEN - 1));
+  ToLower (Param->ChipBaseBand);
+  Src = Param->ChipBaseBand;
+  STR_COPY (Dst, Src);
 
-   Src = Param->DisplayCmdLine;
-   --Dst;
-   STR_COPY (Dst, Src);
+  Src = Param->DisplayCmdLine;
+  --Dst;
+  STR_COPY (Dst, Src);
 
-   if (Param->MdtpActive) {
-     Src = Param->MdtpActiveFlag;
-     --Dst;
-     STR_COPY (Dst, Src);
-   }
+  if (Param->MdtpActive) {
+    Src = Param->MdtpActiveFlag;
+    --Dst;
+    STR_COPY (Dst, Src);
+  }
 
-   if (Param->MultiSlotBoot &&
-      !IsBootDevImage ()) {
+  if (Param->MultiSlotBoot &&
+     !IsBootDevImage ()) {
      /* Slot suffix */
-     Src = Param->AndroidSlotSuffix;
+    Src = Param->AndroidSlotSuffix;
+    --Dst;
+    STR_COPY (Dst, Src);
+    --Dst;
+
+    UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
+                          Param->SlotSuffixAscii);
+    Src = Param->SlotSuffixAscii;
+    STR_COPY (Dst, Src);
+  }
+
+  if ((IsBuildAsSystemRootImage () &&
+      !Param->MultiSlotBoot) ||
+      (Param->MultiSlotBoot &&
+      !IsBootDevImage ())) {
+    /* Skip Initramfs*/
+    if (!Param->Recovery) {
+      Src = Param->SkipRamFs;
+      --Dst;
+      STR_COPY (Dst, Src);
+    }
+
+     /* Add root command line */
+     Src = Param->RootCmdLine;
      --Dst;
      STR_COPY (Dst, Src);
-     --Dst;
 
-     UnicodeStrToAsciiStr (GetCurrentSlotSuffix ().Suffix,
-                           Param->SlotSuffixAscii);
-     Src = Param->SlotSuffixAscii;
-     STR_COPY (Dst, Src);
-
-     /* Skip Initramfs*/
-     if (!Param->Recovery) {
-       Src = Param->SkipRamFs;
-       --Dst;
-       STR_COPY (Dst, Src);
-     }
-
-     /*Add Multi slot command line suffix*/
-     Src = Param->MultiSlotCmdSuffix;
+     /* Add init value*/
+     Src = Param->InitCmdline;
      --Dst;
      STR_COPY (Dst, Src);
    }
-  return EFI_SUCCESS;
+   return EFI_SUCCESS;
 }
 
 /*Update command line: appends boot information to the original commandline
@@ -570,7 +581,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   if (MultiSlotBoot) {
     CmdLineLen += AsciiStrLen (AndroidSlotSuffix) + 2;
 
-    CmdLineLen += AsciiStrLen (MultiSlotCmdSuffix);
+    CmdLineLen += AsciiStrLen (RootCmdLine);
+    CmdLineLen += AsciiStrLen (InitCmdline);
 
     if (!Recovery)
       CmdLineLen += AsciiStrLen (SkipRamFs);
@@ -603,7 +615,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
   Param.FfbmStr = FfbmStr;
   Param.AndroidSlotSuffix = AndroidSlotSuffix;
   Param.SkipRamFs = SkipRamFs;
-  Param.MultiSlotCmdSuffix = MultiSlotCmdSuffix;
+  Param.RootCmdLine = RootCmdLine;
+  Param.InitCmdline = InitCmdline;
 
   Status = UpdateCmdLineParams (&Param, FinalCmdLine);
   if (Status != EFI_SUCCESS) {

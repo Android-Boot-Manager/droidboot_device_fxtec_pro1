@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -95,6 +95,7 @@
   GCC:*_*_*_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-all -Wno-varargs -fno-common
   GCC:*_*_*_DLINK_FLAGS = -Ttext=0x0
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO
+  GCC:*_*_*_CC_FLAGS = -DPRODUCT_NAME=\"$(BOARD_BOOTLOADER_PRODUCT_NAME)\"
 
   !if $(VERIFIED_BOOT)
       GCC:*_*_*_CC_FLAGS = -DVERIFIED_BOOT
@@ -112,6 +113,15 @@
   !endif
   !if $(ENABLE_LE_VARIANT) == 1
       GCC:*_*_*_CC_FLAGS = -DENABLE_LE_VARIANT
+  !endif
+  !if $(BUILD_SYSTEM_ROOT_IMAGE)
+      GCC:*_*_*_CC_FLAGS = -DBUILD_SYSTEM_ROOT_IMAGE
+  !endif
+  !if $(DISABLE_PARALLEL_DOWNLOAD_FLASH) == 1
+      GCC:*_*_*_CC_FLAGS = -DDISABLE_PARALLEL_DOWNLOAD_FLASH
+  !endif
+  !ifdef $(INIT_BIN)
+      GCC:*_*_*_CC_FLAGS = -DINIT_BIN='$(INIT_BIN)'
   !endif
 
 [PcdsFixedAtBuild.common]
