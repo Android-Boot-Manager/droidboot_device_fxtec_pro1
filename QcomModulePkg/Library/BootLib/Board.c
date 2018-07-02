@@ -79,6 +79,38 @@ GetRamPartitions (RamPartitionEntry **RamPartitions, UINT32 *NumPartitions)
 }
 
 EFI_STATUS
+GetGranuleSize (UINT32 *MinPasrGranuleSize)
+{
+  EFI_STATUS Status = EFI_NOT_FOUND;
+  EFI_RAMPARTITION_PROTOCOL *pRamPartProtocol = NULL;
+
+  Status = gBS->LocateProtocol (&gEfiRamPartitionProtocolGuid, NULL,
+                                (VOID **)&pRamPartProtocol);
+  if (EFI_ERROR (Status) ||
+        (pRamPartProtocol == NULL)) {
+    DEBUG ((EFI_D_ERROR,
+            "Locate EFI_RAMPARTITION_Protocol failed, Status = %r \n",
+            Status));
+    return Status;
+  }
+
+  if (pRamPartProtocol->Revision < EFI_RAMPARTITION_PROTOCOL_REVISION) {
+    DEBUG ((EFI_D_ERROR, "WARNING: Unsupported EFI_RAMPARTITION_PROTOCOL\n"));
+    return EFI_UNSUPPORTED;
+  }
+
+  Status = pRamPartProtocol->GetMinPasrSize (pRamPartProtocol,
+                                             MinPasrGranuleSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR,
+            "Failed to get MinPasrSize, Status = %r\n",
+            Status));
+    return Status;
+  }
+  return Status;
+}
+
+EFI_STATUS
 BaseMem (UINT64 *BaseMemory)
 {
   EFI_STATUS Status = EFI_NOT_FOUND;

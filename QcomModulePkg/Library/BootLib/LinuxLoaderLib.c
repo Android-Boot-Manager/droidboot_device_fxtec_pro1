@@ -29,6 +29,7 @@
 #include "LinuxLoaderLib.h"
 #include "AutoGen.h"
 #include <Library/BootLinux.h>
+#include <FastbootLib/FastbootCmds.h>
 
 /* Volume Label size 11 chars, round off to 16 */
 #define VOLUME_LABEL_SIZE 16
@@ -491,6 +492,7 @@ GetNandMiscPartiGuid (EFI_GUID *Ptype)
 
 EFI_STATUS
 WriteBlockToPartition (EFI_BLOCK_IO_PROTOCOL *BlockIo,
+                   IN EFI_HANDLE *Handle,
                    IN UINT64 Offset,
                    IN UINT64 Size,
                    IN VOID *Image)
@@ -498,6 +500,10 @@ WriteBlockToPartition (EFI_BLOCK_IO_PROTOCOL *BlockIo,
   EFI_STATUS Status = EFI_SUCCESS;
   CHAR8 *ImageBuffer = NULL;
   UINT32 DivMsgBufSize;
+  UINT32 WriteBlockSize;
+  UINT64 WriteUnitSize = MAX_WRITE_SIZE;
+  INT64 LeftSize = 0;
+  UINT32 WriteSize = 0;
 
   if ((BlockIo == NULL) ||
     (Image == NULL)) {
@@ -505,28 +511,66 @@ WriteBlockToPartition (EFI_BLOCK_IO_PROTOCOL *BlockIo,
     return EFI_INVALID_PARAMETER;
   }
 
+  WriteBlockSize = BlockIo->Media->BlockSize;
+
   /* If the Size is not divisible by BlockSize.
     * Write the Image data to partition in twice.
     * First, write the divisible Image buffer size to partition
     * Second, malloc 1 BlockSize buffer for the rest Image data
     * and then write.
+    *
+    * NOTE: For NAND Targets, BlockSize would be EraseLengthGranularity
+    * aligned which is available in EFI_ERASE_BLOCK_PROTOCOL.
     */
-  DivMsgBufSize = (Size / BlockIo->Media->BlockSize) *
-                   BlockIo->Media->BlockSize;
-  if (DivMsgBufSize) {
-    Status = BlockIo->WriteBlocks (BlockIo,
-                                   BlockIo->Media->MediaId,
-                                   Offset,
-                                   DivMsgBufSize,
-                                   Image);
+  if (CheckRootDeviceType () == NAND) {
+    if (Handle == NULL) {
+      DEBUG ((EFI_D_ERROR, "WriteBlockToPartition: Input Handle is Null.\n"));
+      return EFI_INVALID_PARAMETER;
+    }
+    EFI_ERASE_BLOCK_PROTOCOL *EraseProt = NULL;
+    Status = gBS->HandleProtocol (Handle, &gEfiEraseBlockProtocolGuid,
+                                  (VOID **)&EraseProt);
     if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "Write the divisible Image failed :%r\n", Status));
+      DEBUG ((EFI_D_ERROR, "Unable to locate Erase block protocol handle:%r\n",
+              Status));
       return Status;
+    }
+
+    WriteBlockSize = EraseProt->EraseLengthGranularity;
+  }
+
+  DivMsgBufSize = (Size / WriteBlockSize) * WriteBlockSize;
+  WriteUnitSize = ROUND_TO_PAGE (WriteUnitSize, WriteBlockSize - 1);
+  if (DivMsgBufSize) {
+    /* The big image buffer may take a long flashing time which will block
+       parallel usb image download. It will cause the fastboot  protocol host
+       side timeout. So split the image into small writing units  to let usb
+       have chance to champ in and doing work in parallel.
+      */
+    if (!IsUsbTimerStarted ()) {
+      WriteUnitSize = DivMsgBufSize;
+    }
+
+    LeftSize = DivMsgBufSize;
+    while (LeftSize > 0) {
+      WriteSize = LeftSize > WriteUnitSize? WriteUnitSize : LeftSize;
+      Status = BlockIo->WriteBlocks (BlockIo,
+                                     BlockIo->Media->MediaId,
+                                     Offset,
+                                     WriteSize,
+                                     Image + DivMsgBufSize - LeftSize);
+
+      if (Status != EFI_SUCCESS) {
+        DEBUG ((EFI_D_ERROR, "Write the divisible Image failed :%r\n", Status));
+        return Status;
+      }
+      Offset += WriteSize / BlockIo->Media->BlockSize;
+      LeftSize -= WriteSize;
     }
   }
 
   if (Size - DivMsgBufSize > 0) {
-    ImageBuffer = AllocateZeroPool (BlockIo->Media->BlockSize);
+    ImageBuffer = AllocateZeroPool (WriteBlockSize);
     if (ImageBuffer == NULL) {
       DEBUG ((EFI_D_ERROR, "Failed to allocate zero pool for ImageBuffer\n"));
       return EFI_OUT_OF_RESOURCES;
@@ -537,8 +581,8 @@ WriteBlockToPartition (EFI_BLOCK_IO_PROTOCOL *BlockIo,
      */
     Status = BlockIo->ReadBlocks (BlockIo,
                                  BlockIo->Media->MediaId,
-                                 Offset + Size / BlockIo->Media->BlockSize,
-                                 BlockIo->Media->BlockSize,
+                                 Offset,
+                                 WriteBlockSize,
                                  ImageBuffer);
 
     if (Status != EFI_SUCCESS) {
@@ -551,9 +595,13 @@ WriteBlockToPartition (EFI_BLOCK_IO_PROTOCOL *BlockIo,
     gBS->CopyMem (ImageBuffer, Image + DivMsgBufSize, Size - DivMsgBufSize);
     Status = BlockIo->WriteBlocks (BlockIo,
                                  BlockIo->Media->MediaId,
-                                 Offset+ Size / BlockIo->Media->BlockSize,
-                                 BlockIo->Media->BlockSize,
+                                 Offset,
+                                 WriteBlockSize,
                                  ImageBuffer);
+
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_ERROR, "Writing single block failed :%r\n", Status));
+    }
 
     FreePool (ImageBuffer);
     ImageBuffer = NULL;
@@ -572,6 +620,7 @@ WriteToPartition (EFI_GUID *Ptype, VOID *Msg, UINT32 MsgSize)
   HandleInfo HandleInfoList[1];
   UINT32 MaxHandles;
   UINT32 BlkIOAttrib = 0;
+  EFI_HANDLE *Handle = NULL;
 
   if (Msg == NULL)
     return EFI_INVALID_PARAMETER;
@@ -604,7 +653,8 @@ WriteToPartition (EFI_GUID *Ptype, VOID *Msg, UINT32 MsgSize)
   }
 
   BlkIo = HandleInfoList[0].BlkIo;
-  Status = WriteBlockToPartition (BlkIo, 0, MsgSize, Msg);
+  Handle = HandleInfoList[0].Handle;
+  Status = WriteBlockToPartition (BlkIo, Handle, 0, MsgSize, Msg);
 
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR,
@@ -644,8 +694,10 @@ ResetDeviceState (VOID)
   QCOM_VERIFIEDBOOT_PROTOCOL *VbIntf;
 
   /* If verified boot is not enabled, return SUCCESS */
-  if (!VerifiedBootEnbled ())
+  if (!VerifiedBootEnbled () ||
+     (GetAVBVersion () == AVB_LE )) {
     return EFI_SUCCESS;
+  }
 
   Status = gBS->LocateProtocol (&gEfiQcomVerifiedBootProtocolGuid, NULL,
                                 (VOID **)&VbIntf);

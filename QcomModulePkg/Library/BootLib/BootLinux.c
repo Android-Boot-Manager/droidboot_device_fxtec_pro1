@@ -270,6 +270,9 @@ DTBImgCheckAndAppendDT (BootInfo *Info,
     }
     gBS->CopyMem ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr, FinalDtbHdr,
                    fdt_totalsize (FinalDtbHdr));
+    /* Clear out the old DTB magic so kernel doesn't find it */
+    *((UINT32 *)((BootParamlistPtr->ImageBuffer + BootParamlistPtr->PageSize +
+                 BootParamlistPtr->PatchedKernelHdrSize) + DtbOffset)) = 0;
     post_overlay_free ();
   }
   return EFI_SUCCESS;
@@ -600,18 +603,18 @@ BootLinux (BootInfo *Info)
     BootDevImage = TRUE;
   }
 
-  Status = UpdateCmdLine (BootParamlistPtr.CmdLine, FfbmStr, Recovery,
-                   AlarmBoot, Info->VBCmdLine, &BootParamlistPtr.FinalCmdLine);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
-    return Status;
-  }
-
   Info->HeaderVersion = ((boot_img_hdr *)
                          (BootParamlistPtr.ImageBuffer))->header_version;
   Status = DTBImgCheckAndAppendDT (Info, &BootParamlistPtr,
                                    DtbOffset);
   if (Status != EFI_SUCCESS) {
+    return Status;
+  }
+
+  Status = UpdateCmdLine (BootParamlistPtr.CmdLine, FfbmStr, Recovery,
+                   AlarmBoot, Info->VBCmdLine, &BootParamlistPtr.FinalCmdLine);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "Error updating cmdline. Device Error %r\n", Status));
     return Status;
   }
 

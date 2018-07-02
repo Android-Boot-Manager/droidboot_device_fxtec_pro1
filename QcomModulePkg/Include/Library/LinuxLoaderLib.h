@@ -110,6 +110,10 @@
 #define BOOT_DEV_MAX_LEN 32
 #define BOOT_DEV_NAME_SIZE_MAX 10
 
+/* Allocate unsafe stack size of 128KB to address worst case,
+ * which is same as the  normal stack size */
+#define BOOT_LOADER_MAX_UNSAFE_STACK_SIZE (1 << 17)
+
 /* Any data specific to additional attributes can be added here. */
 typedef struct {
   EFI_GUID *RootDeviceType; /* GUID Selecting the root device type */
@@ -183,6 +187,7 @@ IsMdtpActive (BOOLEAN *IsActive);
 
 EFI_STATUS
 WriteBlockToPartition (EFI_BLOCK_IO_PROTOCOL *BlockIo,
+                   IN EFI_HANDLE *Handle,
                    IN UINT64 Offset,
                    IN UINT64 Size,
                    IN VOID *Image);
