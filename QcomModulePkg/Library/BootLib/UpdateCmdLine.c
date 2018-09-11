@@ -594,6 +594,8 @@ UpdateCmdLine (CONST CHAR8 *CmdLine,
       CmdLineLen += AsciiStrLen (DtboIdxStr);
     }
   }
+  /* 1 extra byte for NULL */
+  CmdLineLen += 1;
 
   Param.Recovery = Recovery;
   Param.MultiSlotBoot = MultiSlotBoot;
