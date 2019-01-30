@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -96,5 +96,5 @@ UINT32 BoardPlatformRawChipId (VOID);
 EFI_STATUS GetRamPartitions (RamPartitionEntry **RamPartitions,
                   UINT32 *NumPartitions);
 EFI_STATUS GetGranuleSize (UINT32 *MinPasrGranuleSize);
-VOID GetPageSize (UINT32 *PageSize);
+VOID GetBlockSize (UINT32 *BlockSize);
 #endif

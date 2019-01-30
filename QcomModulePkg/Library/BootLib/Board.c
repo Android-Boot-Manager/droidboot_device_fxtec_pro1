@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -379,11 +379,11 @@ GetRootDeviceType (CHAR8 *StrDeviceType, UINT32 Len)
 }
 
 /**
- Get device page size
- @param[out]  PageSize  : Pointer to the page size.
+ Get device block size
+ @param[out]  BlockSize  : Pointer to the block size.
  **/
 VOID
-GetPageSize (UINT32 *PageSize)
+GetBlockSize (UINT32 *BlockSize)
 {
   EFI_BLOCK_IO_PROTOCOL *BlkIo = NULL;
   HandleInfo HandleInfoList[HANDLE_MAX_INFO_LIST];
@@ -391,12 +391,12 @@ GetPageSize (UINT32 *PageSize)
   UINT32 Type;
   EFI_STATUS Status = EFI_INVALID_PARAMETER;
 
-  *PageSize = BOOT_IMG_MAX_PAGE_SIZE;
+  *BlockSize = BOOT_ARGS_SIZE;
   Type = CheckRootDeviceType ();
   Status = GetDeviceHandleInfo (HandleInfoList, MaxHandles, Type);
   if (Status == EFI_SUCCESS) {
     BlkIo = HandleInfoList[0].BlkIo;
-    *PageSize = BlkIo->Media->BlockSize;
+    *BlockSize = BlkIo->Media->BlockSize;
   }
 }
 
