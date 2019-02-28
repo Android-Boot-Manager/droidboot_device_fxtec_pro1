@@ -1,5 +1,5 @@
 #/*
-# * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+# * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
 # *
 # * Redistribution and use in source and binary forms, with or without
 # * modification, are permitted provided that the following conditions are
@@ -138,6 +138,8 @@
   gEfiQcomASN1X509ProtocolGuid =        { 0x408ec123, 0x134e, 0x4b80, { 0x91, 0x42, 0xb8, 0x9a, 0xe, 0x08, 0xf8, 0xb3 } }
 
   gEfiQcomSecRSAProtocolGuid =         { 0xeb7a442a, 0xcef4, 0x40a7, {0xa8, 0xae, 0x5a, 0x2e, 0x7f, 0x48, 0xe1, 0x72 } }
+  # Display Utils Protocol
+  gQcomDisplayUtilsProtocolGuid =      { 0xc0dd69ac, 0x76ba, 0x11e6, { 0xab, 0x24, 0x1f, 0xc7, 0xf5, 0x57, 0x5f, 0x19 } }
 
 [PcdsFixedAtBuild.common]
   # LinuxLoaderCommon
