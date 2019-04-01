@@ -1973,7 +1973,7 @@ STATIC VOID
 AcceptData (IN UINT64 Size, IN VOID *Data)
 {
   UINT64 RemainingBytes = mNumDataBytes - mBytesReceivedSoFar;
-  UINT32 BlockSize = 0;
+  UINT32 PageSize = 0;
   UINT32 RoundSize = 0;
 
   /* Protocol doesn't say anything about sending extra data so just ignore it.*/
@@ -1992,8 +1992,8 @@ AcceptData (IN UINT64 Size, IN VOID *Data)
     /* Zero initialized the surplus data buffer. It's risky to access the data
      * buffer which it's not zero initialized, its content might leak
      */
-    GetBlockSize (&BlockSize);
-    RoundSize = ROUND_TO_PAGE (mNumDataBytes, BlockSize - 1);
+    GetPageSize (&PageSize);
+    RoundSize = ROUND_TO_PAGE (mNumDataBytes, PageSize - 1);
     if (RoundSize < MAX_DOWNLOAD_SIZE) {
       gBS->SetMem ((VOID *)(Data + mNumDataBytes), RoundSize - mNumDataBytes,
                    0);
@@ -2274,7 +2274,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   boot_img_hdr *hdr = Data;
   EFI_STATUS Status = EFI_SUCCESS;
   UINT32 ImageSizeActual = 0;
-  UINT32 ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
+  UINT32 ImageHdrSize = 0;
   UINT32 PageSize = 0;
   UINT32 SigActual = SIGACTUAL;
   CHAR8 Resp[MAX_RSP_SIZE];
@@ -2304,6 +2304,9 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
 
   hdr->cmdline[BOOT_ARGS_SIZE - 1] = '\0';
   SetBootDevImage ();
+
+  // Setup page size information for nv storage
+  GetPageSize (&ImageHdrSize);
 
   Status = CheckImageHeader (Data, ImageHdrSize, &ImageSizeActual,
                              &PageSize, FALSE);
@@ -3093,7 +3096,7 @@ FastbootCommandSetup (IN VOID *base, IN UINT32 size)
   AsciiSPrint (StrVariant, sizeof (StrVariant), "%a %a", HWPlatformBuf,
                DeviceType);
   FastbootPublishVar ("variant", StrVariant);
-  GetBlockSize (&BlkSize);
+  GetPageSize (&BlkSize);
   AsciiSPrint (LogicalBlkSizeStr, sizeof (LogicalBlkSizeStr), " 0x%x", BlkSize);
   FastbootPublishVar ("logical-block-size", LogicalBlkSizeStr);
   Type = CheckRootDeviceType ();

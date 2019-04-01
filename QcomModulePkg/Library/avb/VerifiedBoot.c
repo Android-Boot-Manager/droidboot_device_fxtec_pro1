@@ -753,7 +753,7 @@ LoadImageAndAuthVB2 (BootInfo *Info)
   CHAR8 *RequestedPartitionAll[MAX_NUM_REQ_PARTITION] = {NULL};
   CHAR8 **RequestedPartition = NULL;
   UINTN NumRequestedPartition = 0;
-  UINT32 ImageHdrSize = BOOT_IMG_MAX_PAGE_SIZE;
+  UINT32 ImageHdrSize = 0;
   UINT32 PageSize = 0;
   UINT32 ImageSizeActual = 0;
   VOID *ImageBuffer = NULL;
@@ -926,6 +926,7 @@ LoadImageAndAuthVB2 (BootInfo *Info)
   VBData->SlotData = SlotData;
   Info->VBData = (VOID *)VBData;
 
+  GetPageSize (&ImageHdrSize);
   GUARD_OUT (GetImage (Info, &ImageBuffer, &ImageSize,
                     ((!Info->MultiSlotBoot) &&
                      Info->BootIntoRecovery) ?
