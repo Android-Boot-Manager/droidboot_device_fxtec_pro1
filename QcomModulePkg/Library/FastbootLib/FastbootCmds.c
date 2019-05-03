@@ -71,6 +71,7 @@ found at
 #include <Protocol/EFIUbiFlasher.h>
 #include <Protocol/SimpleTextIn.h>
 #include <Protocol/SimpleTextOut.h>
+#include <Protocol/EFIDisplayUtils.h>
 
 #include "AutoGen.h"
 #include "BootImage.h"
@@ -2370,6 +2371,32 @@ CmdRebootBootloader (CONST CHAR8 *arg, VOID *data, UINT32 sz)
 
 #if (defined(ENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS) ||                       \
      defined(ENABLE_UPDATE_PARTITIONS_CMDS))
+STATIC UINT8
+is_display_supported ( VOID )
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  EfiQcomDisplayUtilsProtocol *pDisplayUtilProtocol;
+  EFI_GUID DisplayUtilGUID = EFI_DISPLAYUTILS_PROTOCOL_GUID;
+  EFI_DISPLAY_UTILS_PANEL_CONFIG_PARAMS PanelConfig;
+  UINT32 Index = 0;
+  UINT32 ParamSize = sizeof (PanelConfig);
+  PanelConfig.uPanelIndex = Index;
+
+  if (EFI_SUCCESS == (Status = gBS->LocateProtocol (&DisplayUtilGUID,
+                                    NULL,
+                                    (VOID **)&pDisplayUtilProtocol))) {
+     Status = pDisplayUtilProtocol->DisplayUtilsGetProperty (
+                                     EFI_DISPLAY_UTILS_PANEL_CONFIG,
+                                    (VOID*)&PanelConfig, &ParamSize);
+     if ( Status == EFI_NOT_FOUND ) {
+       DEBUG ((EFI_D_VERBOSE, "Display is not supported\n"));
+       return 0;
+     }
+   }
+   DEBUG ((EFI_D_VERBOSE, "Display is enabled\n"));
+   return 1;
+}
+
 STATIC VOID
 SetDeviceUnlock (UINT32 Type, BOOLEAN State)
 {
@@ -2395,7 +2422,8 @@ SetDeviceUnlock (UINT32 Type, BOOLEAN State)
   }
 
 
-  if (GetAVBVersion () != AVB_LE) {
+  if (GetAVBVersion () != AVB_LE &&
+      is_display_supported ()) {
     Status = DisplayUnlockMenu (Type, State);
     if (Status != EFI_SUCCESS) {
       FastbootFail ("Command not support: the display is not enabled");
@@ -2514,62 +2542,149 @@ CmdOemOffModeCharger (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   }
 }
 
+STATIC EFI_STATUS
+DisplaySetVariable (CHAR16 *VariableName, VOID *VariableValue, UINTN DataSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  BOOLEAN RTVariable = FALSE;
+  EfiQcomDisplayUtilsProtocol *pDisplayUtilsProtocol = NULL;
+
+  Status = gBS->LocateProtocol (&gQcomDisplayUtilsProtocolGuid,
+                                NULL,
+                                (VOID **)&pDisplayUtilsProtocol);
+  if ((EFI_ERROR (Status)) ||
+      (pDisplayUtilsProtocol == NULL)) {
+    RTVariable = TRUE;
+  } else if (pDisplayUtilsProtocol->Revision <  0x20000) {
+    RTVariable = TRUE;
+  } else {
+    /* The display utils version for 0x20000 and above can support
+       display protocol to get and set variable */
+    Status = pDisplayUtilsProtocol->DisplayUtilsSetVariable (
+          VariableName,
+          (UINT8 *)VariableValue,
+          DataSize,
+          0);
+  }
+
+  if (RTVariable) {
+    Status = gRT->SetVariable (VariableName,
+                               &gQcomTokenSpaceGuid,
+                               EFI_VARIABLE_RUNTIME_ACCESS |
+                               EFI_VARIABLE_BOOTSERVICE_ACCESS |
+                               EFI_VARIABLE_NON_VOLATILE,
+                               DataSize,
+                               (VOID *)VariableValue);
+  }
+
+  if (Status == EFI_NOT_FOUND) {
+    // EFI_NOT_FOUND is not an error for retail case.
+    Status = EFI_SUCCESS;
+  } else if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_VERBOSE,
+        "Display set variable failed with status(%d)!\n", Status));
+  }
+
+  return Status;
+}
+
+STATIC EFI_STATUS
+DisplayGetVariable (CHAR16 *VariableName, VOID *VariableValue, UINTN *DataSize)
+{
+  EFI_STATUS Status = EFI_SUCCESS;
+  BOOLEAN RTVariable = FALSE;
+  EfiQcomDisplayUtilsProtocol *pDisplayUtilsProtocol = NULL;
+
+  Status = gBS->LocateProtocol (&gQcomDisplayUtilsProtocolGuid,
+                                NULL,
+                                (VOID **)&pDisplayUtilsProtocol);
+  if ((EFI_ERROR (Status)) ||
+      (pDisplayUtilsProtocol == NULL)) {
+    RTVariable = TRUE;
+  } else if (pDisplayUtilsProtocol->Revision <  0x20000) {
+    RTVariable = TRUE;
+  } else {
+    /* The display utils version for 0x20000 and above can support
+       display protocol to get and set variable */
+    Status = pDisplayUtilsProtocol->DisplayUtilsGetVariable (
+          VariableName,
+          (UINT8 *)VariableValue,
+          DataSize,
+          0);
+  }
+
+  if (RTVariable) {
+    Status = gRT->GetVariable (VariableName,
+                               &gQcomTokenSpaceGuid,
+                               NULL,
+                               DataSize,
+                               (VOID *)VariableValue);
+  }
+
+  if (Status == EFI_NOT_FOUND) {
+    // EFI_NOT_FOUND is not an error for retail case.
+    Status = EFI_SUCCESS;
+  } else if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_VERBOSE,
+        "Display get variable failed with status(%d)!\n", Status));
+  }
+
+  return Status;
+}
+
 STATIC VOID
 CmdOemSelectDisplayPanel (CONST CHAR8 *arg, VOID *data, UINT32 sz)
 {
   EFI_STATUS Status;
   CHAR8 resp[MAX_RSP_SIZE] = "Selecting Panel: ";
   CHAR8 DisplayPanelStr[MAX_DISPLAY_PANEL_OVERRIDE] = "";
+  CHAR8 DisplayPanelStrExist[MAX_DISPLAY_PANEL_OVERRIDE] = "";
   INTN Pos = 0;
   UINTN CurStrLen = 0;
   UINTN TotalStrLen = 0;
   BOOLEAN Append = FALSE;
 
   for (Pos = 0; Pos < AsciiStrLen (arg); Pos++) {
-      if (arg[Pos] == ' ') {
-          arg++;
-          Pos--;
-      } else if (arg[Pos] == ':') {
-          Append = TRUE;
-      } else {
-          break;
-      }
+    if (arg[Pos] == ' ') {
+      arg++;
+      Pos--;
+    } else if (arg[Pos] == ':') {
+      Append = TRUE;
+    } else {
+      break;
+    }
   }
 
   if (Append) {
-      Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelOverride",
-              &gQcomTokenSpaceGuid, NULL, &CurStrLen, NULL);
-      TotalStrLen = CurStrLen + AsciiStrLen (arg);
-      if ((Status != EFI_BUFFER_TOO_SMALL) ||
-              (!CurStrLen) ||
-              (TotalStrLen >= MAX_DISPLAY_PANEL_OVERRIDE))
-          Append = FALSE;
-  }
+    CurStrLen = sizeof (DisplayPanelStrExist) / sizeof (CHAR8);
 
-  if (Append) {
-      Status = gRT->GetVariable ((CHAR16 *)L"DisplayPanelOverride",
-              &gQcomTokenSpaceGuid, NULL,
-              &CurStrLen, (VOID *)DisplayPanelStr);
-      if (Status != EFI_SUCCESS) {
-          DEBUG ((EFI_D_ERROR, "Get panel name failed, %r\n", Status));
-      } else {
-          DEBUG ((EFI_D_INFO, "existing panel name (%a)\n", DisplayPanelStr));
-          AsciiStrnCatS (DisplayPanelStr,
-                  MAX_DISPLAY_PANEL_OVERRIDE, arg, AsciiStrLen (arg));
-          DEBUG ((EFI_D_INFO, "resultant panel name (%a)\n", DisplayPanelStr));
-      }
-  } else {
+    Status = DisplayGetVariable ((CHAR16 *)L"DisplayPanelOverride",
+                                 (VOID *)DisplayPanelStrExist,
+                                 &CurStrLen);
+    TotalStrLen = CurStrLen + AsciiStrLen (arg);
+
+    if ((EFI_SUCCESS == Status) &&
+        (0 != CurStrLen) &&
+        (TotalStrLen < MAX_DISPLAY_PANEL_OVERRIDE)) {
       AsciiStrnCatS (DisplayPanelStr,
-              MAX_DISPLAY_PANEL_OVERRIDE, arg, AsciiStrLen (arg));
+                     MAX_DISPLAY_PANEL_OVERRIDE,
+                     DisplayPanelStrExist,
+                     CurStrLen);
+      DEBUG ((EFI_D_INFO, "existing panel name (%a)\n", DisplayPanelStr));
+    }
   }
+
+  AsciiStrnCatS (DisplayPanelStr,
+                 MAX_DISPLAY_PANEL_OVERRIDE,
+                 arg,
+                 AsciiStrLen (arg));
 
   /* Update the environment variable with the selected panel */
-  Status = gRT->SetVariable (
-      (CHAR16 *)L"DisplayPanelOverride", &gQcomTokenSpaceGuid,
-      EFI_VARIABLE_RUNTIME_ACCESS | EFI_VARIABLE_BOOTSERVICE_ACCESS,
-      AsciiStrLen (DisplayPanelStr), (VOID *)DisplayPanelStr);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Failed to set panel name, %r\n", Status));
+  Status = DisplaySetVariable ((CHAR16 *)L"DisplayPanelOverride",
+                               (VOID *)DisplayPanelStr,
+                               AsciiStrLen (DisplayPanelStr));
+
+  if (EFI_ERROR (Status)) {
     AsciiStrnCatS (resp, sizeof (resp), ": failed", AsciiStrLen (": failed"));
     FastbootFail (resp);
   } else {
