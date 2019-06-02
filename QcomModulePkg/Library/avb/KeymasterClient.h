@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017,2019, The Linux Foundation. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -43,5 +43,11 @@ typedef struct {
 
 EFI_STATUS
 KeyMasterSetRotAndBootState (KMRotAndBootState *BootState);
+
+EFI_STATUS
+SetVerifiedBootHash(CONST CHAR8 *Vbh, UINTN VbhSize);
+
+EFI_STATUS
+KeyMasterGetDateSupport (BOOLEAN *Supported);
 
 #endif /* __KEYMASTER_CLIENT_H__ */
