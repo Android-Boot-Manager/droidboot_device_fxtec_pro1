@@ -8,17 +8,14 @@ export $(BOOTLOADER_OUT)
 BUILDDIR=$(shell pwd)
 export WRAPPER := $(BUILDDIR)/clang-wrapper.py
 
-export CLANG35_BIN := $(CLANG_BIN)
-export CLANG35_GCC_TOOLCHAIN := $(CLANG35_GCC_TOOLCHAIN)
+export CLANG35_BIN := /home/luka/clang/luka/karnak/hadk/prebuilts/clang/host/linux-x86/clang-4053586/bin/
+export CLANG35_GCC_TOOLCHAIN := aarch64-linux-gnu-
 export $(BOARD_BOOTLOADER_PRODUCT_NAME)
 
-ifeq ($(TARGET_ARCHITECTURE),arm)
-export ARCHITECTURE := ARM
-export CLANG35_ARM_PREFIX := $(CLANG_PREFIX)
-else
+
 export ARCHITECTURE := AARCH64
-export CLANG35_AARCH64_PREFIX := $(CLANG_PREFIX)
-endif
+export CLANG35_AARCH64_PREFIX := aarch64-linux-gnu-
+
 
 export BUILD_REPORT_DIR := $(BOOTLOADER_OUT)/build_report
 ANDROID_PRODUCT_OUT := $(BOOTLOADER_OUT)/Build
@@ -65,11 +62,7 @@ else
 	UBSAN_GCC_FLAG_ALIGNMENT :=
 endif
 
-ifeq ($(TARGET_ARCHITECTURE), arm)
-	LOAD_ADDRESS := 0X8FB00000
-else
-	LOAD_ADDRESS := 0X9FA00000
-endif
+LOAD_ADDRESS := 0X9FA00000
 
 ifeq ($(ENABLE_LE_VARIANT), true)
 	ENABLE_LE_VARIANT := 1
