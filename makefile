@@ -10,6 +10,7 @@ export WRAPPER := $(BUILDDIR)/clang-wrapper.py
 
 export CLANG35_BIN := /home/luka/clang/luka/karnak/hadk/prebuilts/clang/host/linux-x86/clang-4053586/bin/
 export CLANG35_GCC_TOOLCHAIN := aarch64-linux-gnu-
+BOARD_BOOTLOADER_PRODUCT_NAME := "ABM Android Boot Manager"
 export $(BOARD_BOOTLOADER_PRODUCT_NAME)
 
 
@@ -27,7 +28,7 @@ BUILD_ROOT := $(ANDROID_PRODUCT_OUT)/$(TARGET)_$(TARGET_TOOLS)
 EDK_TOOLS := $(BUILDDIR)/BaseTools
 EDK_TOOLS_BIN := $(EDK_TOOLS)/Source/C/bin
 ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
-ABL_FV_ELF := $(BOOTLOADER_OUT)/../../abl.elf
+ABL_FV_ELF := $(BOOTLOADER_OUT)/abl.elf
 SHELL:=/bin/bash
 
 # This function is to check version compatibility, used to control features based on the compiler version. \
@@ -125,12 +126,12 @@ ABL_FV_IMG: EDK_TOOLS_BIN
 	-t $(TARGET_TOOLS) \
 	-b $(TARGET) \
 	-D ABL_OUT_DIR=$(ANDROID_PRODUCT_OUT) \
-	-D BUILD_SYSTEM_ROOT_IMAGE=$(BUILD_SYSTEM_ROOT_IMAGE) \
-	-D VERIFIED_BOOT=$(VERIFIED_BOOT) \
+	-D BUILD_SYSTEM_ROOT_IMAGE=1 \
+	-D VERIFIED_BOOT=1 \
 	-D VERIFIED_BOOT_2=$(VERIFIED_BOOT_2) \
 	-D VERIFIED_BOOT_LE=$(VERIFIED_BOOT_LE) \
 	-D VERITY_LE=$(VERITY_LE) \
-	-D USER_BUILD_VARIANT=$(USER_BUILD_VARIANT) \
+	-D USER_BUILD_VARIANT=0 \
 	-D DISABLE_PARALLEL_DOWNLOAD_FLASH=$(DISABLE_PARALLEL_DOWNLOAD_FLASH) \
 	-D ENABLE_LE_VARIANT=$(ENABLE_LE_VARIANT) \
 	-D INIT_BIN=$(INIT_BIN) \
