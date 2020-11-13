@@ -407,7 +407,7 @@ UefiMain (
     //
     // install our (solitary) HII package
     //
-    ShellInfoObject.HiiHandle = HiiAddPackages (&gEfiCallerIdGuid, gImageHandle, ShellStrings, NULL);
+    ShellInfoObject.HiiHandle = HiiAddPackages (&gEfiCallerIdGuid, gImageHandle, LinuxLoaderStrings, NULL);
     if (ShellInfoObject.HiiHandle == NULL) {
       if (PcdGetBool(PcdShellSupportFrameworkHii)) {
         ///@todo Add our package into Framework HII

@@ -47,29 +47,10 @@
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
 
-STATIC BOOLEAN BootReasonAlarm = FALSE;
-STATIC BOOLEAN BootIntoFastboot = FALSE;
-STATIC BOOLEAN BootIntoRecovery = FALSE;
+
 
 STATIC VOID* UnSafeStackPtr;
 
-STATIC EFI_STATUS __attribute__ ( (no_sanitize ("safe-stack")))
-AllocateUnSafeStackPtr (VOID)
-{
-
-  EFI_STATUS Status = EFI_SUCCESS;
-
-  UnSafeStackPtr = AllocatePool (BOOT_LOADER_MAX_UNSAFE_STACK_SIZE);
-  if (UnSafeStackPtr == NULL) {
-    DEBUG ((EFI_D_ERROR, "Failed to Allocate memory for UnSafeStack \n"));
-    Status = EFI_OUT_OF_RESOURCES;
-    return Status;
-  }
-
-  UnSafeStackPtr += BOOT_LOADER_MAX_UNSAFE_STACK_SIZE;
-
-  return Status;
-}
 
 //This function is to return the Unsafestack ptr address
 VOID** __attribute__ ( (no_sanitize ("safe-stack")))
@@ -81,52 +62,8 @@ __safestack_pointer_address (VOID)
 
 // This function is used to Deactivate MDTP by entering recovery UI
 
-STATIC EFI_STATUS MdtpDisable (VOID)
-{
-  BOOLEAN MdtpActive = FALSE;
-  EFI_STATUS Status = EFI_SUCCESS;
-  QCOM_MDTP_PROTOCOL *MdtpProtocol;
 
-  if (FixedPcdGetBool (EnableMdtpSupport)) {
-    Status = IsMdtpActive (&MdtpActive);
 
-    if (EFI_ERROR (Status))
-      return Status;
-
-    if (MdtpActive) {
-      Status = gBS->LocateProtocol (&gQcomMdtpProtocolGuid, NULL,
-                                    (VOID **)&MdtpProtocol);
-      if (EFI_ERROR (Status)) {
-        DEBUG ((EFI_D_ERROR, "Failed to locate MDTP protocol, Status=%r\n",
-                Status));
-        return Status;
-      }
-      /* Perform Local Deactivation of MDTP */
-      Status = MdtpProtocol->MdtpDeactivate (MdtpProtocol, FALSE);
-    }
-  }
-
-  return Status;
-}
-
-STATIC UINT8
-GetRebootReason (UINT32 *ResetReason)
-{
-  EFI_RESETREASON_PROTOCOL *RstReasonIf;
-  EFI_STATUS Status;
-
-  Status = gBS->LocateProtocol (&gEfiResetReasonProtocolGuid, NULL,
-                                (VOID **)&RstReasonIf);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Error locating the reset reason protocol\n"));
-    return Status;
-  }
-
-  RstReasonIf->GetResetReason (RstReasonIf, ResetReason, NULL, NULL);
-  if (RstReasonIf->Revision >= EFI_RESETREASON_PROTOCOL_REVISION)
-    RstReasonIf->ClearResetReason (RstReasonIf);
-  return Status;
-}
 
 /**
   Linux Loader Application EntryPoint
@@ -142,153 +79,6 @@ GetRebootReason (UINT32 *ResetReason)
 EFI_STATUS EFIAPI  __attribute__ ( (no_sanitize ("safe-stack")))
 LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
 {
-  EFI_STATUS Status;
-
-  UINT32 BootReason = NORMAL_MODE;
-  UINT32 KeyPressed;
-  /* MultiSlot Boot */
-  BOOLEAN MultiSlotBoot;
-
-  DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
-  DEBUG ((EFI_D_VERBOSE, "LinuxLoader Load Address to debug ABL: 0x%llx\n",
-         (UINTN)LinuxLoaderEntry & (~ (0xFFF))));
-  DEBUG ((EFI_D_VERBOSE, "LinuxLoaderEntry Address: 0x%llx\n",
-         (UINTN)LinuxLoaderEntry));
-
-  Status = AllocateUnSafeStackPtr ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Unable to Allocate memory for Unsafe Stack: %r\n",
-            Status));
-    goto stack_guard_update_default;
-  }
-
-  StackGuardChkSetup ();
-
-  BootStatsSetTimeStamp (BS_BL_START);
-
-  // Initialize verified boot & Read Device Info
-  Status = DeviceInfoInit ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Initialize the device info failed: %r\n", Status));
-    goto stack_guard_update_default;
-  }
-
-  Status = EnumeratePartitions ();
-
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "LinuxLoader: Could not enumerate partitions: %r\n",
-            Status));
-    goto stack_guard_update_default;
-  }
-
-  UpdatePartitionEntries ();
-  /*Check for multislot boot support*/
-  MultiSlotBoot = PartitionHasMultiSlot ((CONST CHAR16 *)L"boot");
-  if (MultiSlotBoot) {
-    DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
-    FindPtnActiveSlot ();
-  }
-
-  Status = GetKeyPress (&KeyPressed);
-  if (Status == EFI_SUCCESS) {
-    if (KeyPressed == SCAN_DOWN)
-      BootIntoFastboot = TRUE;
-    if (KeyPressed == SCAN_UP)
-      BootIntoRecovery = TRUE;
-    if (KeyPressed == SCAN_ESC)
-      RebootDevice (EMERGENCY_DLOAD);
-  } else if (Status == EFI_DEVICE_ERROR) {
-    DEBUG ((EFI_D_ERROR, "Error reading key status: %r\n", Status));
-    goto stack_guard_update_default;
-  }
-
-  // check for reboot mode
-  Status = GetRebootReason (&BootReason);
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Failed to get Reboot reason: %r\n", Status));
-    goto stack_guard_update_default;
-  }
-
-  switch (BootReason) {
-  case FASTBOOT_MODE:
-    BootIntoFastboot = TRUE;
-    break;
-  case RECOVERY_MODE:
-    BootIntoRecovery = TRUE;
-    break;
-  case ALARM_BOOT:
-    BootReasonAlarm = TRUE;
-    break;
-  case DM_VERITY_ENFORCING:
-    // write to device info
-    Status = EnableEnforcingMode (TRUE);
-    if (Status != EFI_SUCCESS)
-      goto stack_guard_update_default;
-    break;
-  case DM_VERITY_LOGGING:
-    /* Disable MDTP if it's Enabled through Local Deactivation */
-    Status = MdtpDisable ();
-    if (EFI_ERROR (Status) && Status != EFI_NOT_FOUND) {
-      DEBUG ((EFI_D_ERROR, "MdtpDisable Returned error: %r\n", Status));
-      goto stack_guard_update_default;
-    }
-    // write to device info
-    Status = EnableEnforcingMode (FALSE);
-    if (Status != EFI_SUCCESS)
-      goto stack_guard_update_default;
-
-    break;
-  case DM_VERITY_KEYSCLEAR:
-    Status = ResetDeviceState ();
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "VB Reset Device State error: %r\n", Status));
-      goto stack_guard_update_default;
-    }
-    break;
-  default:
-    if (BootReason != NORMAL_MODE) {
-      DEBUG ((EFI_D_ERROR,
-             "Boot reason: 0x%x not handled, defaulting to Normal Boot\n",
-             BootReason));
-    }
-    break;
-  }
-
-  Status = RecoveryInit (&BootIntoRecovery);
-  if (Status != EFI_SUCCESS)
-    DEBUG ((EFI_D_VERBOSE, "RecoveryInit failed ignore: %r\n", Status));
-
-  /* Populate board data required for fastboot, dtb selection and cmd line */
-  Status = BoardInit ();
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_ERROR, "Error finding board information: %r\n", Status));
-    return Status;
-  }
-
-  if (!BootIntoFastboot) {
-    BootInfo Info = {0};
-    Info.MultiSlotBoot = MultiSlotBoot;
-    Info.BootIntoRecovery = BootIntoRecovery;
-    Info.BootReasonAlarm = BootReasonAlarm;
-    Status = LoadImageAndAuth (&Info);
-    if (Status != EFI_SUCCESS) {
-      DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
-      goto fastboot;
-    }
-
-    BootLinux (&Info);
-  }
-
-fastboot:
-  DEBUG ((EFI_D_INFO, "Launching fastboot\n"));
-  Status = FastbootInitialize ();
-  if (EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "Failed to Launch Fastboot App: %d\n", Status));
-    goto stack_guard_update_default;
-  }
-
-stack_guard_update_default:
-  /*Update stack check guard with defualt value then return*/
-  __stack_chk_guard = DEFAULT_STACK_CHK_GUARD;
-  return Status;
+  gST->ConOut->ClearScreen(gST->ConOut);
+  return EFI_SUCCESS;
 }
