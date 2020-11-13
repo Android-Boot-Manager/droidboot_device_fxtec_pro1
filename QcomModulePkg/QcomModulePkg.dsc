@@ -94,6 +94,9 @@ FileHandleLib|MdePkg/Library/UefiFileHandleLib/UefiFileHandleLib.inf
   UdpIoLib|MdeModulePkg/Library/DxeUdpIoLib/DxeUdpIoLib.inf
 
    PeCoffGetEntryPointLib|MdePkg/Library/BasePeCoffGetEntryPointLib/BasePeCoffGetEntryPointLib.inf
+
+
+
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmV7/ArmV7Lib.inf
   NULL|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf
@@ -161,6 +164,22 @@ FileHandleLib|MdePkg/Library/UefiFileHandleLib/UefiFileHandleLib.inf
 #
 ################################################################################
 [Components.common]
+  MdeModulePkg/Universal/Disk/DiskIoDxe/DiskIoDxe.inf{
+    <LibraryClasses>
+      NULL|QcomModulePkg/Library/StackCanary/StackCanary.inf
+}
+  MdeModulePkg/Universal/Disk/PartitionDxe/PartitionDxe.inf{
+    <LibraryClasses>
+      NULL|QcomModulePkg/Library/StackCanary/StackCanary.inf
+}
+  MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf{
+    <LibraryClasses>
+      NULL|QcomModulePkg/Library/StackCanary/StackCanary.inf
+}
+  FatPkg/EnhancedFatDxe/Fat.inf{
+    <LibraryClasses>
+      NULL|QcomModulePkg/Library/StackCanary/StackCanary.inf
+}
 ShellPkg/Application/Shell/Shell.inf {
     <LibraryClasses>
       ShellCommandLib|ShellPkg/Library/UefiShellCommandLib/UefiShellCommandLib.inf
