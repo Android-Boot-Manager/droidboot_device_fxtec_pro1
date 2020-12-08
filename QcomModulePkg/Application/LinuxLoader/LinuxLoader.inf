@@ -60,6 +60,7 @@
 	EfiFileLib
 	FastbootLib
 	UbsanLib
+    LittleVglLib
 
 [Guids]
 	gEfiFileInfoGuid

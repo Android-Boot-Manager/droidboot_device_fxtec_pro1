@@ -1,3 +1,5 @@
 Build/
 tags/
 build_modulepkg.log
+o/
+*.elf

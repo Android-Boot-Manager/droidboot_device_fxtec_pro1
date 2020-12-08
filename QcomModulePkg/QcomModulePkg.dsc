@@ -78,6 +78,10 @@
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
   UefiHiiServicesLib|MdeModulePkg/Library/UefiHiiServicesLib/UefiHiiServicesLib.inf
   AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+  LittleVglLib|AbmPkg/Library/LVGL/lvgl.inf
+  StrLib|AbmPkg/Library/StrLib/StrLib.inf
+  MallocLib|AbmPkg/Library/MallocLib/MallocLib.inf
+  MicroLibC|AbmPkg/Library/MicroLibC/MicroLibC.inf
 
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmV7/ArmV7Lib.inf

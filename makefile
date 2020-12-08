@@ -8,17 +8,14 @@ export $(BOOTLOADER_OUT)
 BUILDDIR=$(shell pwd)
 export WRAPPER := $(BUILDDIR)/clang-wrapper.py
 
-export CLANG35_BIN := $(CLANG_BIN)
-export CLANG35_GCC_TOOLCHAIN := $(CLANG35_GCC_TOOLCHAIN)
+export CLANG35_BIN := /home/luka/clang/luka/karnak/hadk/prebuilts/clang/host/linux-x86/clang-4053586/bin/
+export CLANG35_GCC_TOOLCHAIN := aarch64-linux-gnu-
 export $(BOARD_BOOTLOADER_PRODUCT_NAME)
 
-ifeq ($(TARGET_ARCHITECTURE),arm)
-export ARCHITECTURE := ARM
-export CLANG35_ARM_PREFIX := $(CLANG_PREFIX)
-else
+
 export ARCHITECTURE := AARCH64
-export CLANG35_AARCH64_PREFIX := $(CLANG_PREFIX)
-endif
+export CLANG35_AARCH64_PREFIX := aarch64-linux-gnu-
+
 
 export BUILD_REPORT_DIR := $(BOOTLOADER_OUT)/build_report
 ANDROID_PRODUCT_OUT := $(BOOTLOADER_OUT)/Build
@@ -30,7 +27,7 @@ BUILD_ROOT := $(ANDROID_PRODUCT_OUT)/$(TARGET)_$(TARGET_TOOLS)
 EDK_TOOLS := $(BUILDDIR)/BaseTools
 EDK_TOOLS_BIN := $(EDK_TOOLS)/Source/C/bin
 ABL_FV_IMG := $(BUILD_ROOT)/FV/abl.fv
-ABL_FV_ELF := $(BOOTLOADER_OUT)/../../abl.elf
+ABL_FV_ELF := abl.elf
 SHELL:=/bin/bash
 
 # This function is to check version compatibility, used to control features based on the compiler version. \

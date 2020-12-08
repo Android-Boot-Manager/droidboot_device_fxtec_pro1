@@ -47,9 +47,9 @@ INCLUDE = $(TOOL_INCLUDE) -I $(MAKEROOT) -I $(MAKEROOT)/Include/Common -I $(MAKE
 CPPFLAGS = $(INCLUDE)
 ifeq ($(DARWIN),Darwin)
 # assume clang or clang compatible flags on OS X
-CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -Wall -Werror -Wno-deprecated-declarations -Wno-self-assign -nostdlib -c -g
+CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -Wall  -Wno-deprecated-declarations -Wno-self-assign -nostdlib -c -g -Wno-int-to-void-pointer-cast -Wint-to-pointer-cast
 else
-CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -Wall -Werror -Wno-deprecated-declarations -nostdlib -c -g
+CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -Wall  -Wno-deprecated-declarations -nostdlib -c -g -Wno-int-to-void-pointer-cast -Wint-to-pointer-cast
 endif
 LFLAGS =
 
