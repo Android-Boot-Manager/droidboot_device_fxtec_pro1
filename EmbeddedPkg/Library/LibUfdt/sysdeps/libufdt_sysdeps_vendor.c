@@ -7,6 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <string.h>
+#define strncmp(s1, s2, n) ((int)AsciiStrnCmp((s1), (s2), (n)))
+
+static inline void *memchr(const void *s, int c, size_t n) {
+  return ScanMem8 (s, n, c);
+}
+
 int dto_print(const char *fmt, ...) {
   int err;
 
@@ -245,9 +252,9 @@ void *dto_memcpy(void *dest, const void *src, size_t n) {
 int dto_strcmp(const char *s1, const char *s2) { return strcmp(s1, s2); }
 
 int dto_strncmp(const char *s1, const char *s2, size_t n) {
-  return strncmp(s1, s2, n);
+  return AsciiStrnCmp(s1, s2, n);
 }
 
-void *dto_memchr(const void *s, int c, size_t n) { return memchr(s, c, n); }
+void *dto_memchr(const void *s, int c, size_t n) { return ScanMem8(s, n, c); }
 
 void *dto_memset(void *s, int c, size_t n) { return memset(s, c, n); }

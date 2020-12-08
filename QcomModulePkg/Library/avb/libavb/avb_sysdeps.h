@@ -39,18 +39,12 @@ extern "C" {
  * must be present.
  */
 #include <Base.h>
-
+#include <stdint.h>
 #define true ((BOOLEAN) (1 == 1))
 #define false ((BOOLEAN) (0 == 1))
 
 typedef BOOLEAN bool;
-typedef UINT8 uint8_t;
-typedef UINT16 uint16_t;
-typedef UINT32 uint32_t;
-typedef UINT64 uint64_t;
-typedef UINTN uintptr_t;
-typedef UINTN size_t;
-typedef INT64 int64_t;
+typedef long unsigned int size_t;
 
 /* If you don't have gcc or clang, these attribute macros may need to
  * be adjusted.

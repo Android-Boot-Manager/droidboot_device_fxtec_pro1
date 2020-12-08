@@ -36,6 +36,8 @@
 #include <Library/UpdateDeviceTree.h>
 #include <Protocol/EFIChipInfoTypes.h>
 #include <Protocol/EFIRng.h>
+#include <stdint.h>
+#include <string.h>
 
 #define DTB_PAD_SIZE 2048
 #define NUM_SPLASHMEM_PROP_ELEM 4

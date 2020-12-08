@@ -24,6 +24,8 @@
 #
 #  VALID_ARCHITECTURES           = ARM AARCH64
 #
+[LibraryClasses]
+  MicroLibC
 
 [Sources]
   fdt_ro.c
@@ -35,4 +37,5 @@
 
 [Packages]
   MdePkg/MdePkg.dec
+  AbmPkg/Abm.dec
   EmbeddedPkg/EmbeddedPkg.dec

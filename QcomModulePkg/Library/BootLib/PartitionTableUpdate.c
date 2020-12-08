@@ -35,6 +35,7 @@
 #include <Uefi.h>
 #include <Uefi/UefiSpec.h>
 #include <VerifiedBoot.h>
+#include <string.h>
 
 STATIC BOOLEAN FlashingGpt;
 STATIC BOOLEAN ParseSecondaryGpt;

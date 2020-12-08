@@ -52,8 +52,12 @@
 
 #include <fdt.h>
 #include <libfdt.h>
-
+#include <string.h>
 #include "libfdt_internal.h"
+
+#define memmove(d, s, n) CopyMem (d, s, n)
+#define memcmp(d, s, n) CopyMem (d, s, n)
+#define memchr(s, c, n) ScanMem8 (s, n, c)
 
 static int _fdt_sw_check_header(void *fdt)
 {

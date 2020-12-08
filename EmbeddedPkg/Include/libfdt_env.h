@@ -19,17 +19,13 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Uefi.h>
-
+#include <stdint.h>
+#include <string.h>
 typedef UINT16 fdt16_t;
 typedef UINT32 fdt32_t;
 typedef UINT64 fdt64_t;
 
-typedef UINT8 uint8_t;
-typedef UINT16 uint16_t;
-typedef UINT32 uint32_t;
-typedef UINT64 uint64_t;
-typedef UINTN uintptr_t;
-typedef UINTN size_t;
+typedef long unsigned int size_t;
 typedef BOOLEAN bool;
 
 static inline uint16_t fdt16_to_cpu(fdt16_t x)
@@ -50,46 +46,7 @@ static inline uint64_t fdt64_to_cpu(fdt64_t x)
 }
 #define cpu_to_fdt64(x) fdt64_to_cpu(x)
 
-static inline void* memcpy(void* dest, const void* src, size_t len) {
-  return CopyMem (dest, src, len);
-}
 
-static inline void *memmove(void *dest, const void *src, size_t n) {
-  return CopyMem (dest, src, n);
-}
-
-static inline void *memset(void *s, int c, size_t n) {
-  return SetMem (s, n, c);
-}
-
-static inline int memcmp(const void* dest, const void* src, int len) {
-  return CompareMem (dest, src, len);
-}
-
-static inline void *memchr(const void *s, int c, size_t n) {
-  return ScanMem8 (s, n, c);
-}
-
-static inline size_t strlen (const char* str) {
-  return AsciiStrLen (str);
-}
-
-static inline char *strchr(const char *s, int c) {
-  char pattern[2];
-  pattern[0] = c;
-  pattern[1] = 0;
-  return AsciiStrStr (s, pattern);
-}
-
-static inline int strcmp(const char *s1, const char *s2)
-{
-  return (int)AsciiStrCmp( s1, s2);
-}
-
-static inline int strncmp(const char *s1, const char *s2, size_t n)
-{
-  return (int)AsciiStrnCmp( s1, s2, n);
-}
 
 /**
   Simple character classification routines, corresponding to POSIX class names
@@ -127,6 +84,7 @@ static inline int isspace (int c)
   //
   return ((c) == ' ');
 }
+#define strlen(s) ((size_t)AsciiStrLen((s)))
 
 #define UINT32_MAX      0xffffffffU                     /* uint32_t       */
 /** The strtoul function converts the initial portion of the string pointed to

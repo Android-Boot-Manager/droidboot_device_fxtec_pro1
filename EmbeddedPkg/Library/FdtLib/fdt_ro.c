@@ -55,6 +55,14 @@
 
 #include "libfdt_internal.h"
 
+#include <stdint.h>
+#include <../../../QcomModulePkg/Include/string.h>
+
+#define memmove(d, s, n) CopyMem (d, s, n)
+#define memcmp(d, s, n) CopyMem (d, s, n)
+#define memchr(s, c, n) ScanMem8 (s, n, c)
+
+
 static int _fdt_nodename_eq(const void *fdt, int offset,
 			    const char *s, int len)
 {

@@ -153,6 +153,7 @@
 
 	QcomModulePkg/Application/LinuxLoader/LinuxLoader.inf {
 		<LibraryClasses>
+            MicroLibC|AbmPkg/Library/MicroLibC/MicroLibC.inf
 			FdtLib|EmbeddedPkg/Library/FdtLib/FdtLib.inf
 			LibUfdt|EmbeddedPkg/Library/LibUfdt/LibUfdt.inf
 			ArmSmcLib|ArmPkg/Library/ArmSmcLib/ArmSmcLib.inf
