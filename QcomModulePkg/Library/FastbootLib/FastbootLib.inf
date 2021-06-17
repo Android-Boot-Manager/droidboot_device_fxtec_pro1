@@ -69,9 +69,11 @@
   DebugLib
   UefiHiiServicesLib
   UbsanLib
-
+  DevicePathLib
+  
 [Protocols]
   gEfiSimpleTextInProtocolGuid
+  gEfiDevicePathToTextProtocolGuid
   gEfiSimpleTextOutProtocolGuid
   gEfiBlockIoProtocolGuid
   gEfiDiskIoProtocolGuid
@@ -82,6 +84,7 @@
   gEfiEraseBlockProtocolGuid
   gEfiUbiFlasherProtocolGuid
   gQcomDisplayUtilsProtocolGuid
+  
 
 [Guids]
   gEfiUfsLU0Guid

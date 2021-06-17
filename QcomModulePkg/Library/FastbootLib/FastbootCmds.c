@@ -62,9 +62,9 @@ found at
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UnlockMenu.h>
 #include <Uefi.h>
-
+#include <Protocol/DevicePathToText.h>
 #include <Guid/EventGroup.h>
-
+#include <Protocol/DevicePath.h>
 #include <Protocol/BlockIo.h>
 #include <Protocol/DiskIo.h>
 #include <Protocol/EFIUsbDevice.h>
@@ -3110,6 +3110,83 @@ Exit:
   return Status;
 }
 
+// FS/storage related commands
+STATIC VOID
+CmdlsVolumes (CONST CHAR8 *arg, VOID *data, UINT32 sz)
+{
+  EFI_DEVICE_PATH_TO_TEXT_PROTOCOL *path2text;
+  DEBUG ((EFI_D_INFO, "List volumes\n"));
+  EFI_STATUS Status;
+  UINTN                             HandleCount;
+  EFI_HANDLE                        *HandleBuffer;
+  EFI_DEVICE_PATH_PROTOCOL          *DevicePathProtocol;
+  
+  Status = gBS->LocateHandleBuffer (ByProtocol, &gEfiSimpleFileSystemProtocolGuid, NULL, &HandleCount, &HandleBuffer);
+
+  
+  Status = gBS->LocateProtocol(&gEfiDevicePathToTextProtocolGuid, NULL, (VOID**)&path2text);
+  CHAR8 fastboot_buf[200];
+
+  AsciiSPrint (fastboot_buf, sizeof (fastboot_buf),
+              "Found %d volumes",HandleCount);
+  FastbootInfo (fastboot_buf);
+  WaitForTransferComplete ();
+  for (UINTN Index = 0; Index < HandleCount; Index++) {
+    Status = gBS->HandleProtocol (HandleBuffer[Index], &gEfiDevicePathProtocolGuid, (VOID **)&DevicePathProtocol);
+    AsciiSPrint (fastboot_buf, sizeof (fastboot_buf),
+               "Index: %d, name: %s",Index, path2text->ConvertDevicePathToText(DevicePathProtocol, FALSE, FALSE));
+    FastbootInfo (fastboot_buf); 
+    WaitForTransferComplete ();     
+  }
+  
+  FastbootOkay ("");
+}
+
+STATIC VOID
+Cmdlspartitions (CONST CHAR8 *arg, VOID *data, UINT32 sz)
+{
+  EFI_STATUS Status;
+  EFI_PARTITION_ENTRY *PartEntry;
+  UINT16 i;
+  UINT32 j;
+  /* By default the LunStart and LunEnd would point to '0' and max value */
+  UINT32 LunStart = 0;
+  UINT32 LunEnd = GetMaxLuns ();
+  CHAR8 fastboot_buf[200];
+
+  /* If Lun is set in the Handle flash command then find the block io for that
+   * lun */
+  if (LunSet) {
+    LunStart = Lun;
+    LunEnd = Lun + 1;
+  }
+  for (i = LunStart; i < LunEnd; i++) {
+    for (j = 0; j < Ptable[i].MaxHandles; j++) {
+      Status =
+          gBS->HandleProtocol (Ptable[i].HandleInfoList[j].Handle,
+                               &gEfiPartitionRecordGuid, (VOID **)&PartEntry);
+      if (EFI_ERROR (Status)) {
+        AsciiSPrint (fastboot_buf, sizeof (fastboot_buf),
+                    "Error getting the partition record for Lun %d "
+                               "and Handle: %d : %r\n\n",
+                i, j, Status);
+        FastbootInfo (fastboot_buf);
+        WaitForTransferComplete ();
+        continue;
+      }
+      AsciiSPrint (fastboot_buf, sizeof (fastboot_buf),
+                   "Name:[%s] StartLba: %u EndLba:%u \n",
+              PartEntry->PartitionName, PartEntry->StartingLBA,
+              PartEntry->EndingLBA);
+     FastbootInfo (fastboot_buf);
+     WaitForTransferComplete ();
+      
+    }
+  }
+FastbootOkay ("");
+}
+
+
 /* Registers all Stock commands, Publishes all stock variables
  * and partitiion sizes. base and size are the respective parameters
  * to the Fastboot Buffer used to store the downloaded image for flashing
@@ -3172,6 +3249,8 @@ FastbootCommandSetup (IN VOID *base, IN UINT32 size)
       {"oem off-mode-charge", CmdOemOffModeCharger},
       {"oem select-display-panel", CmdOemSelectDisplayPanel},
       {"oem device-info", CmdOemDevinfo},
+      {"oem ls-volumes", CmdlsVolumes},
+      {"oem ls-partition", Cmdlspartitions},
       {"continue", CmdContinue},
       {"reboot", CmdReboot},
       {"reboot-bootloader", CmdRebootBootloader},
