@@ -42,10 +42,12 @@
 #include <Library/PartitionTableUpdate.h>
 #include <Library/ShutdownServices.h>
 #include <Library/StackCanary.h>
+#include <Library/abm_base.h>
 
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
+
 
 STATIC BOOLEAN BootReasonAlarm = FALSE;
 STATIC BOOLEAN BootIntoFastboot = FALSE;
@@ -161,6 +163,12 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
             Status));
     goto stack_guard_update_default;
   }
+
+  //if (EFI_ERROR (Status)) {
+  //  DEBUG ((EFI_D_ERROR, "Fastboot: Couldn't disable watchdog timer: %r\n",
+  //          Status));
+  //}
+  test_lvgl(ImageHandle, SystemTable);
 
   StackGuardChkSetup ();
 

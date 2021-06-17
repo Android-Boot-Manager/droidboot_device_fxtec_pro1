@@ -82,7 +82,8 @@
   StrLib|AbmPkg/Library/StrLib/StrLib.inf
   MallocLib|AbmPkg/Library/MallocLib/MallocLib.inf
   MicroLibC|AbmPkg/Library/MicroLibC/MicroLibC.inf
-
+  AbmLib|AbmPkg/Library/AbmLib/AbmLib.inf
+  
 [LibraryClasses.ARM]
   ArmLib|ArmPkg/Library/ArmLib/ArmV7/ArmV7Lib.inf
   NULL|ArmPkg/Library/CompilerIntrinsicsLib/CompilerIntrinsicsLib.inf

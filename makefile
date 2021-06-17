@@ -8,7 +8,7 @@ export $(BOOTLOADER_OUT)
 BUILDDIR=$(shell pwd)
 export WRAPPER := $(BUILDDIR)/clang-wrapper.py
 
-export CLANG35_BIN := /home/luka/clang/luka/karnak/hadk/prebuilts/clang/host/linux-x86/clang-4053586/bin/
+export CLANG35_BIN := /home/luka/clang/clang/bin/
 export CLANG35_GCC_TOOLCHAIN := aarch64-linux-gnu-
 export $(BOARD_BOOTLOADER_PRODUCT_NAME)
 
@@ -134,7 +134,7 @@ ABL_FV_IMG: EDK_TOOLS_BIN
 	-D VERIFIED_BOOT_2=$(VERIFIED_BOOT_2) \
 	-D VERIFIED_BOOT_LE=$(VERIFIED_BOOT_LE) \
 	-D VERITY_LE=$(VERITY_LE) \
-	-D USER_BUILD_VARIANT=$(USER_BUILD_VARIANT) \
+	-D USER_BUILD_VARIANT=0 \
 	-D DISABLE_PARALLEL_DOWNLOAD_FLASH=$(DISABLE_PARALLEL_DOWNLOAD_FLASH) \
 	-D ENABLE_LE_VARIANT=$(ENABLE_LE_VARIANT) \
 	-D INIT_BIN=$(INIT_BIN) \
