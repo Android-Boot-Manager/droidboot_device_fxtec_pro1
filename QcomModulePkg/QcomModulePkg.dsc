@@ -82,6 +82,7 @@
   StrLib|AbmPkg/Library/StrLib/StrLib.inf
   MallocLib|AbmPkg/Library/MallocLib/MallocLib.inf
   MicroLibC|AbmPkg/Library/MicroLibC/MicroLibC.inf
+  lwext4Lib|AbmPkg/Library/lwext4/lwext4Lib.inf
   AbmLib|AbmPkg/Library/AbmLib/AbmLib.inf
   
 [LibraryClasses.ARM]
