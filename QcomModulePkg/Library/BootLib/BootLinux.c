@@ -48,6 +48,36 @@
 #include "libfdt.h"
 #include <ufdt_overlay.h>
 
+void DumpHex_l(const void* data, size_t size) {
+	char ascii[17];
+	size_t i, j;
+	ascii[16] = '\0';
+	for (i = 0; i < size; ++i) {
+	    if(((unsigned char*)data)[i] !=0)
+		    DEBUG ((EFI_D_INFO,"%02X ", ((unsigned char*)data)[i]));
+		if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~') {
+			ascii[i % 16] = ((unsigned char*)data)[i];
+		} else {
+			ascii[i % 16] = '.';
+		}
+		if ((i+1) % 8 == 0 || i+1 == size) {
+			DEBUG ((EFI_D_INFO," "));
+			if ((i+1) % 16 == 0) {
+				DEBUG ((EFI_D_INFO,"|  %s \n", ascii));
+			} else if (i+1 == size) {
+				ascii[(i+1) % 16] = '\0';
+				if ((i+1) % 16 <= 8) {
+					DEBUG ((EFI_D_INFO," "));
+				}
+				for (j = (i+1) % 16; j < 16; ++j) {
+					DEBUG ((EFI_D_INFO,"   "));
+				}
+				DEBUG ((EFI_D_INFO,"|  %s \n", ascii));
+			}
+		}
+	}
+}
+
 STATIC QCOM_SCM_MODE_SWITCH_PROTOCOL *pQcomScmModeSwitchProtocol = NULL;
 STATIC BOOLEAN BootDevImage;
 
@@ -205,11 +235,11 @@ DTBImgCheckAndAppendDT (BootInfo *Info,
         NextDtHdr =
           (VOID *)((uintptr_t)SingleDtHdr + fdt_totalsize (SingleDtHdr));
         if (!fdt_check_header (NextDtHdr)) {
-          DEBUG ((EFI_D_VERBOSE, "Not the single appended DTB\n"));
+          DEBUG ((EFI_D_INFO, "Not the single appended DTB\n"));
           return EFI_NOT_FOUND;
         }
 
-        DEBUG ((EFI_D_VERBOSE, "Single appended DTB found\n"));
+        DEBUG ((EFI_D_INFO, "Single appended DTB found\n"));
         if (CHECK_ADD64 (BootParamlistPtr->DeviceTreeLoadAddr,
                                 fdt_totalsize (SingleDtHdr))) {
           DEBUG ((EFI_D_ERROR,
@@ -341,7 +371,7 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr,
     if (!AsciiStrnCmp ((char*)(BootParamlistPtr->ImageBuffer
                  + BootParamlistPtr->PageSize), PATCHED_KERNEL_MAGIC,
                  sizeof (PATCHED_KERNEL_MAGIC) - 1)) {
-      DEBUG ((EFI_D_VERBOSE, "Patched kernel detected\n"));
+      DEBUG ((EFI_D_INFO, "Patched kernel detected\n"));
 
       /* The size of the kernel is stored at start of kernel image + 16
        * The dtb would start just after the kernel */
@@ -386,7 +416,7 @@ GZipPkgCheck (BootParamlist *BootParamlistPtr,
 }
 
 STATIC EFI_STATUS
-LoadAddrAndDTUpdate (BootParamlist *BootParamlistPtr)
+LoadAddrAndDTUpdate (BootParamlist *BootParamlistPtr, bool dualboot)
 {
   EFI_STATUS Status;
   UINT64 RamdiskEndAddr = 0;
@@ -424,30 +454,30 @@ LoadAddrAndDTUpdate (BootParamlist *BootParamlistPtr)
     DEBUG ((EFI_D_ERROR, "Device Tree update failed Status:%r\n", Status));
     return Status;
   }
-
-  gBS->CopyMem ((CHAR8 *)BootParamlistPtr->RamdiskLoadAddr,
-                BootParamlistPtr->ImageBuffer +
-                BootParamlistPtr->RamdiskOffset,
-                BootParamlistPtr->RamdiskSize);
-
-  if (BootParamlistPtr->BootingWith32BitKernel) {
-    if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
-        BootParamlistPtr->KernelSizeActual)) {
-      DEBUG ((EFI_D_ERROR, "Integer Overflow: while Kernel image copy\n"));
-      return EFI_BAD_BUFFER_SIZE;
-    }
-    if (BootParamlistPtr->KernelLoadAddr +
-        BootParamlistPtr->KernelSizeActual >
-        BootParamlistPtr->DeviceTreeLoadAddr) {
-      DEBUG ((EFI_D_ERROR, "Kernel size is over the limit\n"));
-      return EFI_INVALID_PARAMETER;
-    }
-    gBS->CopyMem ((CHAR8 *)BootParamlistPtr->KernelLoadAddr,
+  if(!dualboot){
+    gBS->CopyMem ((CHAR8 *)BootParamlistPtr->RamdiskLoadAddr,
                   BootParamlistPtr->ImageBuffer +
-                  BootParamlistPtr->PageSize,
-                  BootParamlistPtr->KernelSizeActual);
-  }
+                  BootParamlistPtr->RamdiskOffset,
+                  BootParamlistPtr->RamdiskSize);
 
+    if (BootParamlistPtr->BootingWith32BitKernel) {
+      if (CHECK_ADD64 (BootParamlistPtr->KernelLoadAddr,
+          BootParamlistPtr->KernelSizeActual)) {
+        DEBUG ((EFI_D_ERROR, "Integer Overflow: while Kernel image copy\n"));
+        return EFI_BAD_BUFFER_SIZE;
+      }
+      if (BootParamlistPtr->KernelLoadAddr +
+          BootParamlistPtr->KernelSizeActual >
+          BootParamlistPtr->DeviceTreeLoadAddr) {
+        DEBUG ((EFI_D_ERROR, "Kernel size is over the limit\n"));
+        return EFI_INVALID_PARAMETER;
+      }
+      gBS->CopyMem ((CHAR8 *)BootParamlistPtr->KernelLoadAddr,
+                    BootParamlistPtr->ImageBuffer +
+                    BootParamlistPtr->PageSize,
+                    BootParamlistPtr->KernelSizeActual);
+    }
+  }
   if (FixedPcdGetBool (EnablePartialGoods)) {
     Status = UpdatePartialGoodsNode
                 ((VOID *)BootParamlistPtr->DeviceTreeLoadAddr);
@@ -462,7 +492,7 @@ LoadAddrAndDTUpdate (BootParamlist *BootParamlistPtr)
 }
 
 EFI_STATUS
-BootLinux (BootInfo *Info)
+BootLinux (BootInfo *Info, struct DualbootInfo1 *db, void * dual_kernel, int dual_kernel_size, void * dual_initrd, int dual_initrd_size, void * dual_cmdline, int dual_cmdline_size)
 {
 
   EFI_STATUS Status;
@@ -533,15 +563,16 @@ BootLinux (BootInfo *Info)
 
   // Retrive Base Memory Address from Ram Partition Table
   Status = BaseMem (&BootParamlistPtr.BaseMemory);
+  DEBUG ((EFI_D_INFO, "Memory Base Address: 0x%x\n", BootParamlistPtr.BaseMemory));
   if (Status != EFI_SUCCESS) {
     DEBUG ((EFI_D_ERROR, "Base memory not found!!! Status:%r\n", Status));
     return Status;
   }
-
   // These three regions should be reserved in memory map.
   BootParamlistPtr.KernelLoadAddr =
       (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr.BaseMemory |
                               PcdGet32 (KernelLoadAddress));
+  DEBUG ((EFI_D_INFO, "Kernel Address: 0x%x\n", BootParamlistPtr.KernelLoadAddr));
   BootParamlistPtr.RamdiskLoadAddr =
       (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr.BaseMemory |
                               PcdGet32 (RamdiskLoadAddress));
@@ -549,9 +580,19 @@ BootLinux (BootInfo *Info)
       (EFI_PHYSICAL_ADDRESS) (BootParamlistPtr.BaseMemory |
                               PcdGet32 (TagsAddress));
 
+if(dual_kernel_size>0){
+    CopyMem((void *)BootParamlistPtr.KernelLoadAddr, dual_kernel, dual_kernel_size);
+    CopyMem((void *)(BootParamlistPtr.ImageBuffer + BootParamlistPtr.PageSize), dual_kernel, dual_kernel_size);
+    BootParamlistPtr.KernelSize=dual_kernel_size;
+    CopyMem((void *)BootParamlistPtr.RamdiskLoadAddr, dual_initrd, dual_initrd_size);
+    BootParamlistPtr.RamdiskSize=dual_initrd_size;
+   CopyMem((void *)BootParamlistPtr.CmdLine, dual_cmdline, dual_cmdline_size);
+  }
+  DumpHex_l((void *)(BootParamlistPtr.KernelLoadAddr+LOCAL_ROUND_TO_PAGE (BootParamlistPtr.KernelSize,BootParamlistPtr.PageSize)), 100);
   Status = GZipPkgCheck (&BootParamlistPtr, &DtbOffset,
                          &BootParamlistPtr.KernelLoadAddr,
                          &BootParamlistPtr.BootingWith32BitKernel);
+  DEBUG ((EFI_D_ERROR, "DtbOffset=%u\n", DtbOffset));
   if (Status != EFI_SUCCESS) {
     return Status;
   }
@@ -561,6 +602,7 @@ BootLinux (BootInfo *Info)
    *Kernel, Ramdisk and Second sizes all rounded to page
    *The offset and the LOCAL_ROUND_TO_PAGE function is written in a way that it
    *is done the same in LK*/
+   
   BootParamlistPtr.KernelSizeActual = LOCAL_ROUND_TO_PAGE (
                                           BootParamlistPtr.KernelSize,
                                           BootParamlistPtr.PageSize);
@@ -568,29 +610,33 @@ BootLinux (BootInfo *Info)
                                            BootParamlistPtr.PageSize);
   SecondSizeActual = LOCAL_ROUND_TO_PAGE (BootParamlistPtr.SecondSize,
                                           BootParamlistPtr.PageSize);
-
+  
   /*Offsets are the location of the images within the boot image*/
 
   BootParamlistPtr.RamdiskOffset = ADD_OF (BootParamlistPtr.PageSize,
                            BootParamlistPtr.KernelSizeActual);
-  if (!BootParamlistPtr.RamdiskOffset) {
-    DEBUG ((EFI_D_ERROR, "Integer Overflow: PageSize=%u, KernelSizeActual=%u\n",
-           BootParamlistPtr.PageSize, BootParamlistPtr.KernelSizeActual));
-    return EFI_BAD_BUFFER_SIZE;
-  }
+  //DumpHex_l((void *)BootParamlistPtr.RamdiskOffset, 100);
+ // if(dual_kernel_size>0){
+    //CopyMem((void *)BootParamlistPtr.RamdiskOffset, dual_initrd, dual_initrd_size);
+  //}
+  //if (!BootParamlistPtr.RamdiskOffset) {
+  //  DEBUG ((EFI_D_ERROR, "Integer Overflow: PageSize=%u, KernelSizeActual=%u\n",
+  //         BootParamlistPtr.PageSize, BootParamlistPtr.KernelSizeActual));
+  //  return EFI_BAD_BUFFER_SIZE;
+  //}
 
-  DEBUG ((EFI_D_VERBOSE, "Kernel Load Address: 0x%x\n",
+  DEBUG ((EFI_D_INFO, "Kernel Load Address: 0x%x\n",
                                         BootParamlistPtr.KernelLoadAddr));
-  DEBUG ((EFI_D_VERBOSE, "Kernel Size Actual: 0x%x\n",
+  DEBUG ((EFI_D_INFO, "Kernel Size Actual: 0x%x\n",
                                       BootParamlistPtr.KernelSizeActual));
-  DEBUG ((EFI_D_VERBOSE, "Second Size Actual: 0x%x\n", SecondSizeActual));
-  DEBUG ((EFI_D_VERBOSE, "Ramdisk Load Address: 0x%x\n",
+  DEBUG ((EFI_D_INFO, "Second Size Actual: 0x%x\n", SecondSizeActual));
+  DEBUG ((EFI_D_INFO, "Ramdisk Load Address: 0x%x\n",
                                        BootParamlistPtr.RamdiskLoadAddr));
-  DEBUG ((EFI_D_VERBOSE, "Ramdisk Size Actual: 0x%x\n", RamdiskSizeActual));
-  DEBUG ((EFI_D_VERBOSE, "Ramdisk Offset: 0x%x\n",
+  DEBUG ((EFI_D_INFO, "Ramdisk Size Actual: 0x%x\n", RamdiskSizeActual));
+  DEBUG ((EFI_D_INFO, "Ramdisk Offset: 0x%x\n",
                                        BootParamlistPtr.RamdiskOffset));
   DEBUG (
-      (EFI_D_VERBOSE, "Device Tree Load Address: 0x%x\n",
+      (EFI_D_ERROR, "Device Tree Load Address: 0x%x\n",
                              BootParamlistPtr.DeviceTreeLoadAddr));
 
   /*Updates the command line from boot image, appends device serial no.,
@@ -605,6 +651,9 @@ BootLinux (BootInfo *Info)
 
   Info->HeaderVersion = ((boot_img_hdr *)
                          (BootParamlistPtr.ImageBuffer))->header_version;
+  if(!DtbOffset){
+    DEBUG ((EFI_D_ERROR, "DTB offset NULL!!!!!!!!!!!!!!!!!!!\n"));
+  }
   Status = DTBImgCheckAndAppendDT (Info, &BootParamlistPtr,
                                    DtbOffset);
   if (Status != EFI_SUCCESS) {
@@ -618,7 +667,12 @@ BootLinux (BootInfo *Info)
     return Status;
   }
 
-  Status = LoadAddrAndDTUpdate (&BootParamlistPtr);
+  if(dual_kernel_size>0){
+  Status = LoadAddrAndDTUpdate (&BootParamlistPtr, TRUE);
+  }
+  else{
+  Status = LoadAddrAndDTUpdate (&BootParamlistPtr, FALSE);
+  }
   if (Status != EFI_SUCCESS) {
        return Status;
   }
@@ -808,11 +862,11 @@ CheckImageHeader (VOID *ImageHdrBuffer,
       return EFI_BAD_BUFFER_SIZE;
     }
   }
-  DEBUG ((EFI_D_VERBOSE, "Boot Image Header Info...\n"));
-  DEBUG ((EFI_D_VERBOSE, "Kernel Size 1            : 0x%x\n", KernelSize));
-  DEBUG ((EFI_D_VERBOSE, "Kernel Size 2            : 0x%x\n", SecondSize));
-  DEBUG ((EFI_D_VERBOSE, "Ramdisk Size             : 0x%x\n", RamdiskSize));
-  DEBUG ((EFI_D_VERBOSE, "Image Header version     : 0x%x\n", HeaderVersion));
+  DEBUG ((EFI_D_INFO, "Boot Image Header Info...\n"));
+  DEBUG ((EFI_D_INFO, "Kernel Size 1            : 0x%x\n", KernelSize));
+  DEBUG ((EFI_D_INFO, "Kernel Size 2            : 0x%x\n", SecondSize));
+  DEBUG ((EFI_D_INFO, "Ramdisk Size             : 0x%x\n", RamdiskSize));
+  DEBUG ((EFI_D_INFO, "Image Header version     : 0x%x\n", HeaderVersion));
 
   return Status;
 }

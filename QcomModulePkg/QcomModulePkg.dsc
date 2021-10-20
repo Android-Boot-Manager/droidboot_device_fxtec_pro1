@@ -71,7 +71,6 @@
   TimerLib|ArmPkg/Library/ArmArchTimerLib/ArmArchTimerLib.inf
   ArmGenericTimerCounterLib|ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.inf
   Zlib|QcomModulePkg/Library/zlib/zlib.inf
-  DebugLib|MdeModulePkg/Library/PeiDxeDebugLibReportStatusCode/PeiDxeDebugLibReportStatusCode.inf
   ReportStatusCodeLib|MdeModulePkg/Library/DxeReportStatusCodeLib/DxeReportStatusCodeLib.inf
   DebugPrintErrorLevelLib|MdeModulePkg/Library/DxeDebugPrintErrorLevelLib/DxeDebugPrintErrorLevelLib.inf
   UefiDriverEntryPoint|MdePkg/Library/UefiDriverEntryPoint/UefiDriverEntryPoint.inf
@@ -116,7 +115,7 @@
       GCC:*_*_*_CC_FLAGS = -DVERITY_LE
   !endif
   !if $(USER_BUILD_VARIANT) == 0
-      GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS
+      GCC:*_*_*_CC_FLAGS = -DENABLE_UPDATE_PARTITIONS_CMDS -DENABLE_BOOT_CMD -DENABLE_DEVICE_CRITICAL_LOCK_UNLOCK_CMDS 
   !else
       GCC:*_*_*_CC_FLAGS = -DUSER_BUILD_VARIANT
   !endif
@@ -142,9 +141,9 @@
 # ASSERT_BREAKPOINT_ENABLED  0x10
 # ASSERT_DEADLOOP_ENABLED    0x20
 
-  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x2f
-  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80000042
-  gEfiMdePkgTokenSpaceGuid.PcdReportStatusCodePropertyMask|0x06
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x2F
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel| 0x80000047
+  gEfiMdePkgTokenSpaceGuid.PcdReportStatusCodePropertyMask|0x07
 
 ################################################################################
 #

@@ -126,6 +126,12 @@ typedef struct BootInfo {
   UINT32 HeaderVersion;
 } BootInfo;
 
+typedef struct DualbootInfo1 {
+  BOOLEAN CustomSlot;
+  VOID *linux_kernel;
+  UINT32 linux_size;
+} db;
+
 typedef struct BootLinuxParamlist {
   UINT32 PageSize;
   UINT32 KernelSize;
@@ -147,7 +153,7 @@ typedef struct BootLinuxParamlist {
 } BootParamlist;
 
 EFI_STATUS
-BootLinux (BootInfo *Info);
+BootLinux (BootInfo *Info, struct DualbootInfo1 *db, void * dual_kernel, int dual_kernel_size, void * dual_initrd, int dual_initrd_size, void * dual_cmdline, int dual_cmdline_size);
 EFI_STATUS
 CheckImageHeader (VOID *ImageHdrBuffer,
                   UINT32 ImageHdrSize,

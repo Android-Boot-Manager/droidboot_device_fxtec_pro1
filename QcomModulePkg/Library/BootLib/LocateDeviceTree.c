@@ -417,7 +417,7 @@ DeviceTreeAppended (VOID *kernel,
   list_initialize (&dt_entry_queue->node);
 
   if (!dtb_offset) {
-    DEBUG ((EFI_D_ERROR, "DTB offset is NULL\n"));
+    DEBUG ((EFI_D_ERROR, "DTB offset is: %u\n", dtb_offset));
     goto out;
   }
 
@@ -909,8 +909,8 @@ GetSocDtb (VOID *Kernel, UINT32 KernelSize, UINT32 DtbOffset, VOID *DtbLoadAddr)
   DtInfo CurDtbInfo = {0};
   DtInfo BestDtbInfo = {0};
   if (!DtbOffset) {
-    DEBUG ((EFI_D_ERROR, "DTB offset is NULL\n"));
-    return NULL;
+    DEBUG ((EFI_D_ERROR, "DTB offset is: %u\n"));
+    //return NULL;
   }
 
   if (((uintptr_t)Kernel + (uintptr_t)DtbOffset) < (uintptr_t)Kernel) {

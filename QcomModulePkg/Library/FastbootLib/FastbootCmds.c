@@ -330,7 +330,7 @@ VOID PartitionDump (VOID)
   }
 }
 
-STATIC
+
 EFI_STATUS
 PartitionGetInfo (IN CHAR16 *PartitionName,
                   OUT EFI_BLOCK_IO_PROTOCOL **BlockIo,
@@ -2165,7 +2165,7 @@ CmdContinue (IN CONST CHAR8 *Arg, IN VOID *Data, IN UINT32 Size)
   FastbootUsbDeviceStop ();
   Finished = TRUE;
   // call start Linux here
-  BootLinux (&Info);
+  //BootLinux (&Info);
 }
 
 STATIC VOID UpdateGetVarVariable (VOID)
@@ -2354,7 +2354,7 @@ CmdBoot (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
   FastbootOkay ("");
   FastbootUsbDeviceStop ();
   ResetBootDevImage ();
-  BootLinux (&Info);
+  //BootLinux (&Info);
 
 out:
   ResetBootDevImage ();

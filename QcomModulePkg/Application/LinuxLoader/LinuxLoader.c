@@ -43,17 +43,48 @@
 #include <Library/ShutdownServices.h>
 #include <Library/StackCanary.h>
 #include <Library/abm_base.h>
-
+#include <FastbootLib/FastbootCmds.h>
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
 #define DEFAULT_STACK_CHK_GUARD 0xc0c0c0c0
 
-
+struct DualbootInfo1 *db1;
+EFI_BOOT_SERVICES             *gBS2;
 STATIC BOOLEAN BootReasonAlarm = FALSE;
 STATIC BOOLEAN BootIntoFastboot = FALSE;
 STATIC BOOLEAN BootIntoRecovery = FALSE;
 
 STATIC VOID* UnSafeStackPtr;
+
+void DumpHex_ll(const void* data, size_t size) {
+	char ascii[17];
+	size_t i, j;
+	ascii[16] = '\0';
+	for (i = 0; i < size; ++i) {
+	    if(((unsigned char*)data)[i] !=0)
+		    DEBUG ((EFI_D_INFO,"%02X ", ((unsigned char*)data)[i]));
+		if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~') {
+			ascii[i % 16] = ((unsigned char*)data)[i];
+		} else {
+			ascii[i % 16] = '.';
+		}
+		if ((i+1) % 8 == 0 || i+1 == size) {
+			DEBUG ((EFI_D_INFO," "));
+			if ((i+1) % 16 == 0) {
+				DEBUG ((EFI_D_INFO,"|  %s \n", ascii));
+			} else if (i+1 == size) {
+				ascii[(i+1) % 16] = '\0';
+				if ((i+1) % 16 <= 8) {
+					DEBUG ((EFI_D_INFO," "));
+				}
+				for (j = (i+1) % 16; j < 16; ++j) {
+					DEBUG ((EFI_D_INFO,"   "));
+				}
+				DEBUG ((EFI_D_INFO,"|  %s \n", ascii));
+			}
+		}
+	}
+}
 
 STATIC EFI_STATUS __attribute__ ( (no_sanitize ("safe-stack")))
 AllocateUnSafeStackPtr (VOID)
@@ -164,12 +195,6 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     goto stack_guard_update_default;
   }
 
-  //if (EFI_ERROR (Status)) {
-  //  DEBUG ((EFI_D_ERROR, "Fastboot: Couldn't disable watchdog timer: %r\n",
-  //          Status));
-  //}
-  test_lvgl(ImageHandle, SystemTable);
-
   StackGuardChkSetup ();
 
   BootStatsSetTimeStamp (BS_BL_START);
@@ -196,7 +221,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     DEBUG ((EFI_D_VERBOSE, "Multi Slot boot is supported\n"));
     FindPtnActiveSlot ();
   }
-
+  
   Status = GetKeyPress (&KeyPressed);
   if (Status == EFI_SUCCESS) {
     if (KeyPressed == SCAN_DOWN)
@@ -283,8 +308,36 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
       goto fastboot;
     }
+  EFI_BLOCK_IO_PROTOCOL *BlockIo = NULL;
+  EFI_HANDLE *Handle = NULL;
 
-    BootLinux (&Info);
+  Status = PartitionGetInfo (L"system_b", &BlockIo, &Handle);
+  if (Status != EFI_SUCCESS)
+    return Status;
+  if (!BlockIo) {
+    DEBUG ((EFI_D_ERROR, "BlockIo for %s is corrupted\n", "cache"));
+    return EFI_VOLUME_CORRUPTED;
+  }
+  if (!Handle) {
+    DEBUG ((EFI_D_ERROR, "EFI handle for %s is corrupted\n", "cache"));
+    return EFI_VOLUME_CORRUPTED;
+  }
+UINT64 base_mem=0;
+BaseMem(&base_mem);
+db1=test_lvgl(ImageHandle, SystemTable, BlockIo, base_mem);
+void * dual_kernel=get_dualboot_kernel();
+int dual_kernel_size=get_dualboot_kernel_size();
+void * dual_initrd=get_dualboot_initrd();
+int dual_initrd_size=get_dualboot_initrd_size();
+void * dual_cmdline=get_dualboot_cmdline();
+int dual_cmdline_size=get_dualboot_cmdline_size();
+  gBS2 = SystemTable->BootServices; 
+  //if (EFI_ERROR (Status)) {
+  //  DEBUG ((EFI_D_ERROR, "Fastboot: Couldn't disable watchdog timer: %r\n",
+  //          Status));
+  //}
+    BootLinux (&Info, db1, dual_kernel, dual_kernel_size, dual_initrd, dual_initrd_size, dual_cmdline, dual_cmdline_size);
+    gBS->Stall(EFI_TIMER_PERIOD_MILLISECONDS(2500));
   }
 
 fastboot:

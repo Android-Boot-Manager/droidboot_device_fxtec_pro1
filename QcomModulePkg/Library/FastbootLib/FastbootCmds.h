@@ -133,6 +133,11 @@ UINTN GetXfrSize (VOID);
 EFI_STATUS
 FastbootEnvSetup (VOID *xfer_buffer, UINT32 max);
 
+
+EFI_STATUS
+PartitionGetInfo (IN CHAR16 *PartitionName,
+                  OUT EFI_BLOCK_IO_PROTOCOL **BlockIo,
+                  OUT EFI_HANDLE **Handle);
 /* register a command handler
  * - command handlers will be called if their prefix matches
  * - they are expected to call fastboot_okay() or fastboot_fail()
@@ -141,7 +146,7 @@ FastbootEnvSetup (VOID *xfer_buffer, UINT32 max);
 VOID
 FastbootRegister (CONST CHAR8 *prefix,
                   VOID (*handle) (CONST CHAR8 *arg, VOID *data, UINT32 size));
-
+                  
 /* Only callable from within a command handler
  * One of thse functions must be called to be a valid command
  */
