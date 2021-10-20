@@ -1103,6 +1103,7 @@ DisplayVerifiedBootScreen (BootInfo *Info)
   }
 
   DEBUG ((EFI_D_VERBOSE, "Boot State is : %d\n", Info->BootState));
+  /*
   switch (Info->BootState) {
   case RED:
     Status = DisplayVerifiedBootMenu (DISPLAY_MENU_RED);
@@ -1141,7 +1142,8 @@ DisplayVerifiedBootScreen (BootInfo *Info)
   default:
     break;
   }
-
+  */
+  
   /* dm-verity warning */
   if ((GetAVBVersion () != AVB_2) &&
       !IsEnforcing () &&
